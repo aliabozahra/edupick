@@ -1,290 +1,366 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { API_URL } from "../config";
+import { useNavigate } from 'react-router-dom';
 import '../styles/ComparisonTool.css';
 
-const TRANSLATIONS = {
+// ── Translations ──────────────────────────────────────────────
+const T = {
   en: {
-    title: "Career Comparison Tool",
-    subtitle: "Compare learning tracks side by side",
-    tracksLabel: "Enter tracks to compare",
-    tracksPlaceholder: "e.g. Graphic Design, Interior Design",
-    locationLabel: "Location",
+    title:        "Career Comparison Tool",
+    subtitle:     "Compare learning tracks side by side with live web data",
+    tracksLabel:  "Tracks to compare",
+    trackPlaceholder: "e.g. Web Development",
+    addTrack:     "+ Add Track",
+    minTracks:    "At least 2 tracks required",
+    locationLabel:    "Location",
     locationPlaceholder: "e.g. Egypt",
-    currencyLabel: "Currency",
+    currencyLabel:    "Currency",
     currencyPlaceholder: "e.g. EGP",
-    yearLabel: "Year",
-    yearPlaceholder: "e.g. 2026",
-    criteriaLabel: "Criteria",
-    criteriaOptions: {
-      "1": "Salary",
-      "2": "Duration",
-      "3": "Skills",
-      "4": "All"
+    yearLabel:        "Year",
+    yearPlaceholder:  "e.g. 2026",
+    criteriaLabel:    "Criteria",
+    allCriteria:      "All",
+    compareBtn:       "Compare",
+    loadingTitle:     "Analyzing tracks…",
+    loadingNote:      "Searching the web for live data. This may take 30–60 seconds.",
+    resultTitle:      "Comparison Results",
+    placeholder:      "Enter tracks above and click Compare",
+    error:            "Something went wrong. Please try again.",
+    insights:         "Key Insights",
+    highestSalary:    "Highest Salary",
+    fastestGrowing:   "Fastest Growing",
+    easiestStart:     "Easiest to Start",
+    summary:          "Summary",
+    source:           "Source",
+    createRoadmap:    "Create Roadmap",
+    criteria: {
+      "1": "Required Skills",
+      "2": "Average Salary",
+      "3": "Learning Duration",
+      "4": "Market Demand",
+      "5": "Difficulty Level",
+      "6": "Job Opportunities",
+      "7": "Alternative Paths",
     },
-    compareBtn: "Compare",
-    loading: "Analyzing tracks...",
-    resultTitle: "Comparison Results",
-    placeholder: "Enter tracks above and click Compare",
-    error: "Something went wrong. Please try again.",
   },
   ar: {
-    title: "أداة مقارنة المسارات",
-    subtitle: "قارن المسارات التعليمية جنب لجنب",
-    tracksLabel: "أدخل المسارات للمقارنة",
-    tracksPlaceholder: "مثال: تصميم جرافيك، تصميم داخلي",
-    locationLabel: "الموقع",
+    title:        "أداة مقارنة المسارات",
+    subtitle:     "قارن المسارات المهنية جنب لجنب بناءً على بيانات حية من الإنترنت",
+    tracksLabel:  "المسارات للمقارنة",
+    trackPlaceholder: "مثال: تطوير الويب",
+    addTrack:     "+ إضافة مسار",
+    minTracks:    "مطلوب مسارَين على الأقل",
+    locationLabel:    "الموقع",
     locationPlaceholder: "مثال: مصر",
-    currencyLabel: "العملة",
+    currencyLabel:    "العملة",
     currencyPlaceholder: "مثال: EGP",
-    yearLabel: "السنة",
-    yearPlaceholder: "مثال: 2026",
-    criteriaLabel: "المعايير",
-    criteriaOptions: {
-      "1": "الدخل",
-      "2": "المدة",
-      "3": "المهارات",
-      "4": "الكل"
+    yearLabel:        "السنة",
+    yearPlaceholder:  "مثال: 2026",
+    criteriaLabel:    "المعايير",
+    allCriteria:      "الكل",
+    compareBtn:       "قارن",
+    loadingTitle:     "جارى تحليل المسارات…",
+    loadingNote:      "يتم البحث على الإنترنت. قد يستغرق ذلك ٣٠–٦٠ ثانية.",
+    resultTitle:      "نتيجة المقارنة",
+    placeholder:      "أدخل المسارات واضغط قارن",
+    error:            "حصل خطأ، حاول تاني.",
+    insights:         "أبرز النتائج",
+    highestSalary:    "الأعلى راتباً",
+    fastestGrowing:   "الأسرع نمواً",
+    easiestStart:     "الأسهل للبدء",
+    summary:          "ملخص",
+    source:           "المصدر",
+    createRoadmap:    "إنشاء خارطة طريق",
+    criteria: {
+      "1": "المهارات المطلوبة",
+      "2": "متوسط الراتب",
+      "3": "مدة التعلم",
+      "4": "الطلب في السوق",
+      "5": "مستوى الصعوبة",
+      "6": "فرص العمل",
+      "7": "المسارات البديلة",
     },
-    compareBtn: "قارن",
-    loading: "جارى تحليل المسارات...",
-    resultTitle: "نتيجة المقارنة",
-    placeholder: "أدخل المسارات واضغط قارن",
-    error: "حصل خطأ، حاول تاني.",
-  }
+  },
 };
 
-const CareerComparisonTool = () => {
-  // ===================================================
-  // State
-  // ===================================================
-  const [lang, setLang] = useState('en');           
-  const [tracks, setTracks] = useState('');        
-  const [location, setLocation] = useState('');    
-  const [currency, setCurrency] = useState('');    
-  const [year, setYear] = useState('');           
-  const [criteria, setCriteria] = useState([]);    
-  const [result, setResult] = useState(null);       
-  const [loading, setLoading] = useState(false);    
-  const [error, setError] = useState(null);       
+const ALL_CRITERIA_KEYS = ["1", "2", "3", "4", "5", "6", "7"];
 
-  const t = TRANSLATIONS[lang]; 
+// ── JSON parser ───────────────────────────────────────────────
+function parseResult(raw) {
+  if (!raw) return null;
+  let text = raw.trim()
+    .replace(/^```json\s*/i, '').replace(/\s*```$/i, '')
+    .replace(/^```\s*/,       '').replace(/\s*```$/,  '')
+    .trim();
 
-  // ===================================================
-  // اختيار المعايير (multi-select)
-  // ===================================================
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const data = JSON.parse(match[0]);
+      if (data.comparison && data.tracks) return { type: 'json', data };
+    } catch {}
+  }
+
+  // Markdown table fallback
+  if (text.includes('|')) return { type: 'markdown', raw: text };
+
+  return { type: 'text', raw: text };
+}
+
+// ══════════════════════════════════════════════════════════════
+export default function ComparisonTool() {
+  const navigate = useNavigate();
+
+  const [lang,      setLang]      = useState('en');
+  const [trackList, setTrackList] = useState(['', '']);
+  const [location,  setLocation]  = useState('');
+  const [currency,  setCurrency]  = useState('');
+  const [year,      setYear]      = useState('');
+  const [criteria,  setCriteria]  = useState([]);
+  const [result,    setResult]    = useState(null);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState(null);
+  const [interviewTracks, setInterviewTracks] = useState([]);
+
+  const t = T[lang];
+  const email = localStorage.getItem('userEmail') || '';
+
+  // ── Load interview track suggestions ──────────────────────
+  useEffect(() => {
+    if (!email) return;
+    fetch(`${API_URL}/interview/latest?email=${encodeURIComponent(email)}`)
+      .then(r => r.json())
+      .then(d => { if (d.suggested_tracks?.length) setInterviewTracks(d.suggested_tracks); })
+      .catch(() => {});
+  }, [email]);
+
+  // ── Track list handlers ───────────────────────────────────
+  const updateTrack = (i, val) =>
+    setTrackList(prev => prev.map((t, j) => (j === i ? val : t)));
+  const addTrack    = () => setTrackList(prev => [...prev, '']);
+  const removeTrack = (i) => setTrackList(prev => prev.filter((_, j) => j !== i));
+
+  // Fill the track inputs with all interview-suggested tracks at once
+  const useInterviewTracks = () => {
+    const names = interviewTracks.map(t => t.name).slice(0, 4);
+    setTrackList(names.length >= 2 ? names : [...names, ...Array(2 - names.length).fill('')]);
+  };
+
+  const filledTracks = trackList.filter(t => t.trim());
+
+  // ── Criteria toggle ───────────────────────────────────────
   const toggleCriteria = (key) => {
-    if (key === "4") {
-      // لو اختار "الكل" يشيل كل التاني ويختار 4 بس
-      setCriteria(criteria.includes("4") ? [] : ["4"]);
+    if (key === 'all') {
+      setCriteria(prev =>
+        prev.length === ALL_CRITERIA_KEYS.length ? [] : [...ALL_CRITERIA_KEYS]
+      );
     } else {
       setCriteria(prev =>
-        prev.includes(key)
-          ? prev.filter(k => k !== key)
-          : [...prev.filter(k => k !== "4"), key]
+        prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
       );
     }
   };
 
-  // ===================================================
-  // الباك اند محتاج endpoint: POST /compare
-  // بيستقبل:
-  // {
-  //   lang: 'ar' أو 'en',
-  //   tracks: 'تصميم داخلي, تصميم جرافيك',
-  //   location: 'مصر',
-  //   currency: 'EGP',
-  //   year: '2026',
-  //   criteria: '1,2,3'
-  // }
-  // وبيرجع:
-  // { result: '| المسار | الدخل...' }  ← جدول Markdown
-  // ===================================================
-  const handleCompare = async () => {
-    if (!tracks.trim()) return;
+  const allSelected = criteria.length === ALL_CRITERIA_KEYS.length;
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
+  // ── Compare ───────────────────────────────────────────────
+  const handleCompare = async () => {
+    if (filledTracks.length < 2) return;
+    setLoading(true); setError(null); setResult(null);
+
+    const tracksStr   = filledTracks.join(', ');
+    const criteriaStr = criteria.length
+      ? criteria.join(',')
+      : ALL_CRITERIA_KEYS.join(',');
 
     try {
-      const response = await fetch('http://localhost:5000/compare', {
+      const res  = await fetch(`${API_URL}/compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lang,                                   
-          tracks,                                
+          lang,
+          tracks:   tracksStr,
           location: location || (lang === 'ar' ? 'مصر' : 'Global'),
-          currency: currency.toUpperCase() || 'USD',
-          year: year || '2026',
-          criteria: criteria.join(',') || '4',   
+          currency: (currency.toUpperCase()) || 'USD',
+          year:     year || '2026',
+          criteria: criteriaStr,
         }),
       });
 
-      if (!response.ok) throw new Error('Server error');
+      if (!res.ok) throw new Error('Server error');
 
-      const data = await response.json();
-      setResult(data.result);
-
+      const data = await res.json();
+      setResult(parseResult(data.result));
     } catch (err) {
-      console.error('Comparison error:', err);
       setError(t.error);
     } finally {
       setLoading(false);
     }
   };
 
-  // ===================================================
-  // تحويل الجدول Markdown لـ HTML
-  // لأن الباك اند بيرجع Markdown مش JSON
-  // ===================================================
-  const renderMarkdownTable = (markdown) => {
-    if (!markdown) return null;
-    const lines = markdown.trim().split('\n').filter(l => l.trim());
-    const rows = lines.filter(l => l.startsWith('|'));
-    if (rows.length < 2) return <pre className="raw-result">{markdown}</pre>;
-
-    return (
-      <div className="comparison-table-container">
-        <table className="comparison-table">
-          <thead>
-            <tr>
-              {rows[0].split('|').filter(c => c.trim()).map((cell, i) => (
-                <th key={i}>{cell.trim()}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(2).map((row, i) => (
-              <tr key={i}>
-                {row.split('|').filter(c => c.trim()).map((cell, j) => (
-                  <td key={j}>{cell.trim()}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
+  // ── Create roadmap for a track ────────────────────────────
+  const handleCreateRoadmap = (track) => {
+    navigate('/roadmap', { state: { suggestedTrack: track } });
   };
 
-  // ===================================================
-  // الـ UI
-  // ===================================================
+  // ── Render result ─────────────────────────────────────────
+  const renderResult = () => {
+    if (!result) return null;
+    const { type, data, raw } = result;
+
+    if (type === 'json') {
+      return (
+        <ComparisonResult
+          data={data} t={t} lang={lang}
+          onCreateRoadmap={handleCreateRoadmap}
+        />
+      );
+    }
+    if (type === 'markdown') {
+      return <MarkdownTable markdown={raw} />;
+    }
+    return <pre className="raw-result">{raw}</pre>;
+  };
+
+  // ════════════════════════════════════════════════════════════
   return (
     <div className={`career-comparison-container ${lang === 'ar' ? 'rtl' : 'ltr'}`}>
 
       {/* Header */}
       <header className="tool-header">
         <div className="header-top">
-          <h1>{t.title}</h1>
-
-          {/* ====================================
-              زرار اللغة EN | AR
-              مش عنده علاقة بالباك اند —
-              بس بيغير الـ lang اللي بيتبعت معاه
-              ==================================== */}
+          <div>
+            <h1>{t.title}</h1>
+            <p className="subtitle">{t.subtitle}</p>
+          </div>
           <div className="lang-toggle">
-            <button
-              className={lang === 'en' ? 'active' : ''}
-              onClick={() => setLang('en')}
-            >EN</button>
-            <button
-              className={lang === 'ar' ? 'active' : ''}
-              onClick={() => setLang('ar')}
-            >AR</button>
+            <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>EN</button>
+            <button className={lang === 'ar' ? 'active' : ''} onClick={() => setLang('ar')}>AR</button>
           </div>
         </div>
-        <p className="subtitle">{t.subtitle}</p>
       </header>
 
       <div className="tool-content">
 
-        {/* Left Panel — الـ inputs */}
+        {/* ── Left panel — inputs ── */}
         <div className="selection-panel">
 
-          {/* المسارات */}
+          {interviewTracks.length > 0 && (
+            <div className="ct-suggest-banner">
+              <span className="ct-suggest-text">
+                {lang === 'ar'
+                  ? '✨ من نتيجة الانترفيو، قارن مساراتك المقترحة:'
+                  : '✨ From your interview, compare your suggested tracks:'}
+              </span>
+              <div className="ct-suggest-chips">
+                {interviewTracks.map((tr, i) => (
+                  <button key={i} className="ct-suggest-chip"
+                    onClick={() => {
+                      const empty = trackList.findIndex(x => !x.trim());
+                      if (empty !== -1) updateTrack(empty, tr.name);
+                      else setTrackList(prev => [...prev, tr.name]);
+                    }}>
+                    + {tr.name}
+                  </button>
+                ))}
+                <button className="ct-suggest-all" onClick={useInterviewTracks}>
+                  {lang === 'ar' ? 'استخدم الكل' : 'Use all'}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="input-group">
             <label>{t.tracksLabel}</label>
-            <input
-              type="text"
-              placeholder={t.tracksPlaceholder}
-              value={tracks}
-              onChange={e => setTracks(e.target.value)}
-              // ↑ القيمة دي بتتبعت في tracks للباك اند
-            />
+            <div className="track-inputs">
+              {trackList.map((track, i) => (
+                <div key={i} className="track-input-row">
+                  <span className="track-number">{i + 1}</span>
+                  <input
+                    type="text"
+                    placeholder={`${t.trackPlaceholder} ${i + 1}`}
+                    value={track}
+                    onChange={e => updateTrack(i, e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleCompare()}
+                  />
+                  {trackList.length > 2 && (
+                    <button
+                      className="remove-track-btn"
+                      onClick={() => removeTrack(i)}
+                      title="Remove"
+                    >×</button>
+                  )}
+                </div>
+              ))}
+              {trackList.length < 4 && (
+                <button className="add-track-btn" onClick={addTrack}>
+                  {t.addTrack}
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* الموقع والعملة والسنة */}
           <div className="input-row">
             <div className="input-group">
               <label>{t.locationLabel}</label>
-              <input
-                type="text"
-                placeholder={t.locationPlaceholder}
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-              />
+              <input type="text" placeholder={t.locationPlaceholder}
+                value={location} onChange={e => setLocation(e.target.value)} />
             </div>
             <div className="input-group">
               <label>{t.currencyLabel}</label>
-              <input
-                type="text"
-                placeholder={t.currencyPlaceholder}
-                value={currency}
-                onChange={e => setCurrency(e.target.value)}
-              />
+              <input type="text" placeholder={t.currencyPlaceholder}
+                value={currency} onChange={e => setCurrency(e.target.value)} />
             </div>
             <div className="input-group">
               <label>{t.yearLabel}</label>
-              <input
-                type="text"
-                placeholder={t.yearPlaceholder}
-                value={year}
-                onChange={e => setYear(e.target.value)}
-              />
+              <input type="text" placeholder={t.yearPlaceholder}
+                value={year} onChange={e => setYear(e.target.value)} />
             </div>
           </div>
 
-          {/* المعايير */}
           <div className="input-group">
             <label>{t.criteriaLabel}</label>
             <div className="criteria-buttons">
-              {Object.entries(t.criteriaOptions).map(([key, label]) => (
+              {/* All button */}
+              <button
+                className={`criteria-btn${allSelected ? ' selected' : ''}`}
+                onClick={() => toggleCriteria('all')}
+              >
+                {t.allCriteria}
+              </button>
+              {ALL_CRITERIA_KEYS.map(key => (
                 <button
                   key={key}
-                  className={`criteria-btn ${criteria.includes(key) ? 'selected' : ''}`}
+                  className={`criteria-btn${criteria.includes(key) ? ' selected' : ''}`}
                   onClick={() => toggleCriteria(key)}
-                  // ↑ الأرقام دي بتتبعت للباك اند في criteria
                 >
-                  {label}
+                  {t.criteria[key]}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* زرار المقارنة */}
           <button
             className="compare-btn"
             onClick={handleCompare}
-            disabled={loading || !tracks.trim()}
-            // ↑ لما يتضغط بيبعت كل البيانات للباك اند
+            disabled={loading || filledTracks.length < 2}
           >
-            {loading ? t.loading : t.compareBtn}
+            {loading ? t.loadingTitle : t.compareBtn}
           </button>
 
         </div>
 
-        {/* Right Panel — النتيجة الجاية من الباك اند */}
+        {/* ── Right panel — results ── */}
         <div className="comparison-panel">
           <h2>{t.resultTitle}</h2>
 
-          {error && (
-            <div className="api-warning">⚠️ {error}</div>
-          )}
+          {error && <div className="api-warning">⚠ {error}</div>}
 
           {loading && (
             <div className="loading-state">
-              <div className="spinner"></div>
-              <p>{t.loading}</p>
+              <div className="spinner" />
+              <p className="loading-title">{t.loadingTitle}</p>
+              <p className="loading-note">{t.loadingNote}</p>
             </div>
           )}
 
@@ -295,13 +371,161 @@ const CareerComparisonTool = () => {
             </div>
           )}
 
-          {/* النتيجة: جدول Markdown جاي من الباك اند */}
-          {result && renderMarkdownTable(result)}
-
+          {!loading && renderResult()}
         </div>
+
       </div>
     </div>
   );
-};
+}
 
-export default CareerComparisonTool;
+// Resolve a track's cell within a criterion row even when the LLM keys it
+// slightly differently (case, spacing, partial name) or positionally.
+function resolveCell(trackData, track, index) {
+  if (!trackData || typeof trackData !== 'object') return {};
+  if (trackData[track]) return trackData[track];
+  const keys = Object.keys(trackData);
+  const norm = (s) => String(s).trim().toLowerCase();
+  let key = keys.find((k) => norm(k) === norm(track));
+  if (!key) key = keys.find((k) => norm(k).includes(norm(track)) || norm(track).includes(norm(k)));
+  if (!key && keys[index] !== undefined) key = keys[index]; // positional fallback
+  return key ? (trackData[key] || {}) : {};
+}
+
+// ── Structured JSON result ────────────────────────────────────
+function ComparisonResult({ data, t, lang, onCreateRoadmap }) {
+  const { comparison, insights } = data;
+  // Derive tracks from the comparison data itself when the top-level list is
+  // missing or mismatched — guarantees every column has data.
+  let tracks = Array.isArray(data.tracks) ? data.tracks.filter(Boolean) : [];
+  if (comparison) {
+    const firstRow = Object.values(comparison)[0];
+    const rowKeys = firstRow && typeof firstRow === 'object' ? Object.keys(firstRow) : [];
+    if (rowKeys.length > tracks.length) tracks = rowKeys;
+  }
+
+  return (
+    <div className="ct-result">
+
+      {/* Insights row */}
+      {insights && (
+        <div className="ct-insights-section">
+          <h3 className="ct-section-title">{t.insights}</h3>
+          <div className="ct-insights-row">
+            {insights.highest_salary && (
+              <InsightCard icon="💰" label={t.highestSalary} value={insights.highest_salary} />
+            )}
+            {insights.fastest_growing && (
+              <InsightCard icon="📈" label={t.fastestGrowing} value={insights.fastest_growing} />
+            )}
+            {insights.easiest_to_start && (
+              <InsightCard icon="🚀" label={t.easiestStart} value={insights.easiest_to_start} />
+            )}
+          </div>
+          {insights.summary && (
+            <div className="ct-summary-box">
+              <strong>{t.summary}:</strong> {insights.summary}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Comparison table */}
+      {comparison && tracks?.length > 0 && (
+        <div className="comparison-table-container">
+          <table className="comparison-table">
+            <thead>
+              <tr>
+                <th className="metric-header">{lang === 'ar' ? 'المعيار' : 'Criterion'}</th>
+                {tracks.map((track, i) => (
+                  <th key={i}>{track}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(comparison).map(([criterion, trackData], ri) => (
+                <tr key={ri}>
+                  <td className="metric-label">{criterion}</td>
+                  {tracks.map((track, ti) => {
+                    const cell = resolveCell(trackData, track, ti);
+                    return (
+                      <td key={ti} className="ct-cell">
+                        <span className="ct-cell-value">{cell.value || '—'}</span>
+                        {cell.source && (
+                          <a
+                            href={cell.source}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ct-source-link"
+                          >
+                            {t.source} ↗
+                          </a>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Create roadmap buttons */}
+      {tracks?.length > 0 && (
+        <div className="ct-roadmap-row">
+          {tracks.map((track, i) => (
+            <button
+              key={i}
+              className="ct-roadmap-btn"
+              onClick={() => onCreateRoadmap(track)}
+            >
+              🗺 {t.createRoadmap}: {track}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Insight card ──────────────────────────────────────────────
+function InsightCard({ icon, label, value }) {
+  return (
+    <div className="ct-insight-card">
+      <span className="ct-insight-icon">{icon}</span>
+      <span className="ct-insight-label">{label}</span>
+      <span className="ct-insight-value">{value}</span>
+    </div>
+  );
+}
+
+// ── Markdown table fallback ───────────────────────────────────
+function MarkdownTable({ markdown }) {
+  const lines = markdown.trim().split('\n').filter(l => l.trim());
+  const rows  = lines.filter(l => l.startsWith('|'));
+  if (rows.length < 2) return <pre className="raw-result">{markdown}</pre>;
+
+  return (
+    <div className="comparison-table-container">
+      <table className="comparison-table">
+        <thead>
+          <tr>
+            {rows[0].split('|').filter(c => c.trim()).map((cell, i) => (
+              <th key={i}>{cell.trim()}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(2).map((row, i) => (
+            <tr key={i}>
+              {row.split('|').filter(c => c.trim()).map((cell, j) => (
+                <td key={j}>{cell.trim()}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

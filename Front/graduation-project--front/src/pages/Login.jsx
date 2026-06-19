@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_URL } from "../config";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
@@ -20,7 +21,7 @@ function Login() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/login", {
+      const res = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -29,14 +30,13 @@ function Login() {
       const data = await res.json();
 
       if (res.ok) {
-        localStorage.setItem("token", "dummy-token"); // placeholder token
-        toast.success(data.message || "Login successful!", {
-          position: "top-right",
-          autoClose: 2000,
-        });
-        setTimeout(() => navigate("/"), 2000);
+        localStorage.setItem("token", "dummy-token");
+        localStorage.setItem("userEmail", email);
+        if (data.name) localStorage.setItem("userName", data.name);
+        toast.success(data.message || "Login successful!");
+        setTimeout(() => navigate("/dashboard"), 2000);
       } else {
-        toast.error("Login failed! Please check your credentials.", {
+        toast.error(data.error || "Login failed! Please check your credentials.", {
           position: "top-right",
           autoClose: 3000,
         });

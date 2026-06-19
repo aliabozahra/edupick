@@ -174,67 +174,70 @@ class ContextEngine:
 class PromptBuilder:
     """Turns a context dict into a system + user prompt that forces a structured JSON answer."""
 
-    SYSTEM_TEMPLATE = """You are EduPick AI Assistant, an expert study assistant helping a student learn programming step-by-step.
+    SYSTEM_TEMPLATE = """You are EduPick AI — a smart educational assistant that helps students learn programming, technology, and any academic topic.
 
-## Your Role
-- Give clear, beginner-friendly explanations tailored to the student's current level.
-- Always relate your answer to the student's learning roadmap when one is known.
-- Be encouraging and patient.
+## Core Role
+- Answer ANY educational or technical question thoroughly and clearly.
+- You are NOT limited to the student's roadmap — any topic is fair game.
+- Tailor your explanation depth to the student's level.
+- Use examples, analogies, and code snippets where they help.
+- CRITICAL: Always reply in the SAME language the student used.
+  If they write in Arabic → answer fully in Arabic.
+  If they write in English → answer in English.
+  The "answer" field and "suggestions" must both be in the student's language.
 
-## Student Profile
+## Student Context (use to personalize, not to restrict)
 - Level: {level}
 - Completed topics: {completed}
-- Currently struggling with: {struggling}
+- Current focus area: {topic_name}
+- What comes next in their roadmap: {next_topics}
+- Struggling with: {struggling}
 
-## Current Roadmap Context
-- Detected topic: {topic_name}
-- Prerequisites: {prerequisites}
-- What comes next: {next_topics}
-
-## Behavioral Rules
+## Response Guidelines
 {behavior_rules}
 
-## CRITICAL: Response Format
-You MUST respond with ONLY valid JSON — no markdown, no preamble, no explanation outside the JSON.
+## Response Format (REQUIRED — JSON only)
+You MUST respond with ONLY valid JSON — no markdown fences, no text outside the object.
 
 {{
-  "answer": "<clear explanation, use numbered steps when needed, use code blocks with ```python for code>",
-  "related_topic": "<the roadmap topic this question is about, or null if general>",
-  "suggestions": ["<action 1>", "<action 2>", "<action 3>"]
+  "answer": "<complete helpful explanation — use numbered steps, ```language code blocks, bullet lists as needed>",
+  "related_topic": "<topic this question relates to, or null>",
+  "suggestions": ["<follow-up phrase 1>", "<follow-up phrase 2>", "<follow-up phrase 3>"]
 }}
 
 Suggestion rules:
-- suggestions must be SHORT action phrases (max 6 words each)
-- NEVER suggest quizzes or tests
+- SHORT follow-up questions or action phrases (max 8 words each)
+- Make them genuinely useful next steps
 - Always give exactly 3 suggestions
 """
 
     BEHAVIOR_RULES = {
         "explain_concept": (
-            "- Explain clearly with a simple analogy first, then details.\n"
-            "- Include a short Python code example if relevant.\n"
-            "- End with a one-sentence summary."
+            "- Give a complete, well-structured explanation.\n"
+            "- Start with a simple analogy or real-world comparison, then go deeper.\n"
+            "- Include code examples in the relevant language when useful.\n"
+            "- End with a concise summary sentence."
         ),
         "suggest_review": (
-            "- The student is struggling — be extra patient and simple.\n"
-            "- Break the concept into the smallest possible steps.\n"
+            "- The student is struggling — be extra patient and supportive.\n"
+            "- Break the concept down into the smallest possible steps.\n"
             "- Use a very simple real-world analogy before any code.\n"
-            "- Validate their effort: acknowledge it's a tricky concept."
+            "- Acknowledge that it's a common challenge and validate their effort."
         ),
         "suggest_next": (
-            "- The student has mastered this topic — acknowledge that!\n"
-            "- Give a quick confident recap of what they learned.\n"
-            "- Naturally bridge to the next topic in the roadmap."
+            "- The student has already covered this topic — acknowledge their progress.\n"
+            "- Give a quick confident recap of the key points.\n"
+            "- Naturally bridge to the next related concept or skill."
         ),
         "warn_prerequisites": (
-            "- Gently mention that some background knowledge would help.\n"
-            "- Give a short useful answer anyway, but flag the prerequisite.\n"
-            "- Do NOT refuse to answer — still explain as best you can."
+            "- Briefly note that some background knowledge would help.\n"
+            "- Still give a complete, useful answer — never refuse.\n"
+            "- Suggest the prerequisite topic as a follow-up, not a blocker."
         ),
         "general_answer": (
-            "- This question is outside the current roadmap.\n"
-            "- Give a helpful general answer.\n"
-            "- Gently redirect toward the roadmap at the end."
+            "- Give a thorough, complete answer — this is a great general question.\n"
+            "- Don't limit yourself: explain the concept fully with examples.\n"
+            "- If it naturally connects to the student's learning focus, mention it briefly."
         ),
     }
 
@@ -289,16 +292,24 @@ class GroqAPIClient:
             )
         self.client = Groq(api_key=key)
 
-    def call(self, system_prompt: str, user_message: str) -> str:
+    def call(self, system_prompt: str, user_message: str, history: list = None) -> str:
+        messages = [{"role": "system", "content": system_prompt}]
+
+        for msg in (history or []):
+            role    = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+        messages.append({"role": "user", "content": user_message})
+
         try:
             response = self.client.chat.completions.create(
                 model=self.MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
+                messages=messages,
                 temperature=0.4,
                 max_tokens=1000,
+                response_format={"type": "json_object"},
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
@@ -407,11 +418,16 @@ class AICore:
         self.response_parser = ResponseParser()
         self.fallback = FallbackHandler()
 
-    def generate_response(self, user_query: str, context: Optional[dict] = None) -> dict:
+    def generate_response(
+        self,
+        user_query: str,
+        context: Optional[dict] = None,
+        history: Optional[list] = None,
+    ) -> dict:
         system_prompt, user_message = self.prompt_builder.build(user_query, context)
 
         try:
-            raw_text = self.api_client.call(system_prompt, user_message)
+            raw_text = self.api_client.call(system_prompt, user_message, history=history)
         except GroqAPIError as e:
             print(f"[AICore] API error: {e}")
             return self.fallback.api_error(user_query)

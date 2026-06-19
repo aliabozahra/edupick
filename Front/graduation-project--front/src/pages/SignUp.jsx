@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_URL } from "../config";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -11,6 +12,9 @@ function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [age, setAge] = useState("");
+  const [status, setStatus] = useState("");          // "student" | "graduate"
+  const [studyLevel, setStudyLevel] = useState("");  // "high_school" | "college"
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -26,11 +30,25 @@ function SignUp() {
       return;
     }
 
+    if (!status) {
+      toast.error("Please tell us if you're a student or a graduate");
+      return;
+    }
+
+    if (status === "student" && !studyLevel) {
+      toast.error("Please select your study level");
+      return;
+    }
+
     try {
-      const res = await fetch("http://localhost:5000/signup", { // <-- Flask backend
+      const res = await fetch(`${API_URL}/signup`, { // <-- Flask backend
       method: "POST",
       headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, confirmPassword }),
+        body: JSON.stringify({
+          name, email, password, confirmPassword,
+          age, status,
+          study_level: status === "student" ? studyLevel : "",
+        }),
       });
 
       const data = await res.json();
@@ -112,6 +130,63 @@ function SignUp() {
               required
             />
           </div>
+
+          <div className="form-group">
+            <label htmlFor="age" className="form-label">Age</label>
+            <input
+              id="age"
+              type="number"
+              min="10"
+              max="100"
+              className="form-input"
+              placeholder="e.g. 19"
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">I am a…</label>
+            <div className="su-choice-row">
+              <button
+                type="button"
+                className={`su-choice${status === "student" ? " active" : ""}`}
+                onClick={() => setStatus("student")}
+              >
+                🎓 Student
+              </button>
+              <button
+                type="button"
+                className={`su-choice${status === "graduate" ? " active" : ""}`}
+                onClick={() => { setStatus("graduate"); setStudyLevel(""); }}
+              >
+                💼 Graduate
+              </button>
+            </div>
+          </div>
+
+          {status === "student" && (
+            <div className="form-group">
+              <label className="form-label">Study level</label>
+              <div className="su-choice-row">
+                <button
+                  type="button"
+                  className={`su-choice${studyLevel === "high_school" ? " active" : ""}`}
+                  onClick={() => setStudyLevel("high_school")}
+                >
+                  🏫 High School
+                </button>
+                <button
+                  type="button"
+                  className={`su-choice${studyLevel === "college" ? " active" : ""}`}
+                  onClick={() => setStudyLevel("college")}
+                >
+                  🏛️ College
+                </button>
+              </div>
+            </div>
+          )}
 
           <button className="btn-primary" type="submit">
             Sign Up

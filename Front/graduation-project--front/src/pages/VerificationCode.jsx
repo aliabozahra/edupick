@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_URL } from "../config";
 import { Link, useNavigate } from "react-router-dom";
 import "../styles/common.css";
 import "../styles/auth.css";
@@ -22,7 +23,7 @@ function VerificationCode() {
     setLoading(true);
     setMessage("");
 
-    fetch("http://localhost:5000/verification", {
+    fetch(`${API_URL}/verification`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -48,7 +49,7 @@ function VerificationCode() {
     setResending(true);
     setMessage("");
 
-    fetch("http://localhost:5000/verification", {
+    fetch(`${API_URL}/verification`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "user@example.com" }), 
