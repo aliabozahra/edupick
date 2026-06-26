@@ -41,9 +41,9 @@ COLLEGES_JSON = _data_path("chatbot_final_data.json")
 TRACKS_XLSX   = _data_path("all_tracks.xlsx")
 CHROMA_DIR    = os.getenv("CHROMA_DIR", str(_BACK_DIR / "chroma_interview"))
 
-# ── LLM tier assignment ──────────────────────────────────────
-from llms import llm_4m   as _q_llm   # interview questions need quality Arabic
-from llms import llm_flash as _ext_llm  # keyword extraction is a routing task
+# ── LLM tier assignment (Groq now; OpenRouter variants kept in llms.py) ──
+from llms import groq_llm as _q_llm    # interview questions
+from llms import groq_llm as _ext_llm  # keyword extraction
 
 TOTAL_QUESTIONS = 4
 
@@ -78,20 +78,30 @@ def _build_college_docs(json_path: Path) -> list:
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
     docs = []
+    def _d(obj, key):
+        """Null-safe nested dict accessor (some records have null fields)."""
+        v = (obj or {}).get(key)
+        return v if isinstance(v, dict) else {}
+
+    def _list(obj, key, lang):
+        v = _d(obj, key).get(lang, [])
+        return ", ".join(v) if isinstance(v, list) else (str(v) if v else "")
+
     for idx, item in enumerate(data):
-        meta = item.get("metadata", {})
-        university_ar = meta.get("university", {}).get("ar", "")
-        faculty_ar    = meta.get("faculty",    {}).get("ar", "")
-        department_ar = meta.get("department", {}).get("ar", "")
-        description   = item.get("page_content", {}).get("ar", "")
-        interests_ar  = ", ".join(meta.get("interests",        {}).get("ar", []))
-        subjects_ar   = ", ".join(meta.get("strong_subjects",  {}).get("ar", []))
-        skills_ar     = ", ".join(meta.get("required_skills",  {}).get("ar", []))
-        careers_ar    = ", ".join(meta.get("career_paths",     {}).get("ar", []))
-        learning_ar   = ", ".join(meta.get("learning_style",   {}).get("ar", []))
-        department_en = meta.get("department", {}).get("en", "")
-        interests_en  = ", ".join(meta.get("interests",       {}).get("en", []))
-        skills_en     = ", ".join(meta.get("required_skills", {}).get("en", []))
+        item = item or {}
+        meta = item.get("metadata") or {}
+        university_ar = _d(meta, "university").get("ar", "")
+        faculty_ar    = _d(meta, "faculty").get("ar", "")
+        department_ar = _d(meta, "department").get("ar", "")
+        description   = _d(item, "page_content").get("ar", "")
+        interests_ar  = _list(meta, "interests", "ar")
+        subjects_ar   = _list(meta, "strong_subjects", "ar")
+        skills_ar     = _list(meta, "required_skills", "ar")
+        careers_ar    = _list(meta, "career_paths", "ar")
+        learning_ar   = _list(meta, "learning_style", "ar")
+        department_en = _d(meta, "department").get("en", "")
+        interests_en  = _list(meta, "interests", "en")
+        skills_en     = _list(meta, "required_skills", "en")
 
         content = (
             f"الجامعة: {university_ar}\n"
@@ -199,6 +209,7 @@ def _system_prompt(session: InterviewSession) -> str:
         return (
             f"أنت مستشار أكاديمي ومهني محترف متخصص في توجيه طلاب الثانوية، تُجري مقابلة مباشرة مع {n} وهو يجيب أمامك.\n"
             f"اسم الشخص: {n} — معلومات عنه: {profile}\n"
+            f"ملاحظة مهمة: {n} خريج/ـة ثانوية ومُقبل على اختيار الكلية والتخصص الجامعي (طالب)، فاجعل أسئلتك مناسبة لهذه المرحلة.\n"
             f"هدف المقابلة: مساعدة {n} في اختيار الكلية والتخصص الأنسب.\n"
             f"المقابلة من {TOTAL_QUESTIONS} أسئلة فقط — مرحلة فهم وتحليل فقط.\n\n"
             "الأهداف: الاهتمامات الأكاديمية، المواد المفضلة، الأهداف المهنية، أسلوب التعلم.\n\n"
@@ -219,6 +230,14 @@ def _format_answers(history: list) -> str:
             "───────────────────────────────────"
         )
     return "\n".join(lines)
+
+
+_ANSWER_STYLE = (
+    "\n\nأسلوب السؤال (إلزامي): اطرح سؤالاً واحداً واضحاً ومتوسط الطول — لا قصيراً جداً ولا طويلاً معقّداً — "
+    "بلغة بسيطة يفهمها أي شخص. اشرح في السؤال ما تقصده بإيجاز، ثم اطلب من الشخص صراحةً أن يجيب بالتفصيل "
+    "ويذكر أمثلة وأسبابًا (مثل: «اشرح لي بالتفصيل وقول لي كل اللي في بالك»). يجب أن يكون السؤال احترافيًا "
+    "ويستكشف نقطة جديدة تساعد فعلاً على ترشيح دقيق. أخرج نص السؤال فقط."
+)
 
 
 def _question_prompt(session: InterviewSession, rag_context: str = "") -> str:
@@ -245,6 +264,7 @@ def _question_prompt(session: InterviewSession, rag_context: str = "") -> str:
             f"السؤال الحالي: 1 من {TOTAL_QUESTIONS}\n"
             "لا توجد إجابات سابقة.\n\n"
             f"اطرح السؤال الأول لـ {n}.\n{hint}"
+            + _ANSWER_STYLE
         )
     else:
         last_ans = hist[-1]["answer"]
@@ -256,6 +276,7 @@ def _question_prompt(session: InterviewSession, rag_context: str = "") -> str:
             f"آخر إجابة من {n}: \"{last_ans}\"{rag_block}\n\n"
             f"اطرح السؤال رقم {q} لـ {n}.\n"
             "يجب أن يكون مبنياً على الإجابات السابقة ويغطي جانباً جديداً."
+            + _ANSWER_STYLE
         )
 
 
@@ -292,6 +313,33 @@ def _college_keywords_prompt(answers_summary: str, user_name: str) -> str:
     )
 
 
+def _focused_query(kw: Optional[dict], pref_key: str) -> str:
+    """Build a clean natural-language retrieval query from extracted keywords.
+
+    Dumping the whole keyword JSON into the embedder adds noise (field names,
+    brackets, generic search strings) and hurts relevance. Instead we join the
+    most meaningful signals — the model's explicit picks, the career goal, the
+    interests — into a focused phrase, repeating the explicit picks so they
+    dominate the embedding.
+    """
+    if not isinstance(kw, dict):
+        return ""
+    chunks = []
+    def add(val):
+        if isinstance(val, list):
+            chunks.extend(str(x).strip() for x in val if str(x).strip())
+        elif val:
+            chunks.append(str(val).strip())
+    # weight the explicit preferred picks the most
+    add(kw.get(pref_key))
+    add(kw.get(pref_key))
+    add(kw.get("career_goals"))
+    add(kw.get("interests"))
+    add(kw.get("skills"))
+    add(kw.get("search_queries_arabic"))
+    return " ، ".join(chunks)
+
+
 def _parse_json_response(raw: str) -> Optional[dict]:
     cleaned = re.sub(r"```json\s*|\s*```", "", raw.strip())
     start = cleaned.find("{")
@@ -313,10 +361,25 @@ def _parse_json_response(raw: str) -> Optional[dict]:
 
 def _final_report_prompt(session: InterviewSession, answers_summary: str,
                           track_kw, college_kw,
-                          track_results: list, college_results: list) -> tuple:
-    """Returns (system_prompt, user_prompt) for the final report."""
+                          track_results: list, college_results: list,
+                          suggested_tracks: list = None, suggested_colleges: list = None) -> tuple:
+    """Returns (system_prompt, user_prompt) for the final report.
+
+    The report is forced to recommend EXACTLY the same top-3 tracks/colleges that
+    the structured `suggested_tracks` / `suggested_colleges` contain, so the text
+    report and the UI chips always match.
+    """
     n  = session.user_name
     pt = session.path_type
+    suggested_tracks = suggested_tracks or []
+    suggested_colleges = suggested_colleges or []
+
+    track_list = "\n".join(
+        f"   {i}. {t['name']}" for i, t in enumerate(suggested_tracks, 1)
+    ) or "   (لا يوجد)"
+    college_list = "\n".join(
+        f"   {i}. {c['name']}" for i, c in enumerate(suggested_colleges, 1)
+    ) or "   (لا يوجد)"
 
     track_results_text = "نتائج البحث — التراكات التدريبية:\n\n"
     for i, doc in enumerate(track_results[:5], 1):
@@ -332,13 +395,17 @@ def _final_report_prompt(session: InterviewSession, answers_summary: str,
             f"إجابات {n} في المقابلة:\n{answers_summary}\n\n"
             f"تحليل الاهتمامات:\n{json.dumps(track_kw, ensure_ascii=False, indent=2)}\n\n"
             f"{track_results_text}\n"
+            "التراكات الثلاثة المرشّحة (إلزامي استخدامها كما هي بالضبط وبنفس الترتيب، "
+            "بنفس الأسماء حرفياً دون ترجمة أو تغيير أو إضافة غيرها):\n"
+            f"{track_list}\n\n"
             f"اكتب الآن تقريراً موجهاً إلى {n} مباشرة بصيغة المخاطب (استخدم: أنت، إجاباتك، يناسبك، ننصحك)، "
             "ويحتوي على:\n"
             "1) تحليل شخصي له (فقرتان) — \"من خلال إجاباتك لاحظتُ أنك...\"\n"
-            "2) أفضل 3 تراكات نرشّحها لك (الاسم الرسمي من النتائج، لماذا تناسبك أنت تحديداً، مدة التدريب، المهارات، الوظائف، تحدٍ محتمل)\n"
+            "2) التراكات الثلاثة المرشّحة أعلاه بالضبط (نفس الأسماء والترتيب) — لكل تراك: لماذا يناسبك أنت تحديداً، مدة التدريب، المهارات، الوظائف، تحدٍ محتمل\n"
             "3) نصائح عملية مخصصة لك (3-4 نقاط)\n"
             "4) موارد مقترحة\n\n"
-            f"قواعد: لا نسب أو أرقام تقييم. اربط كل استنتاج بإجابات {n}. خاطبه بصيغة \"أنت\" طوال التقرير ولا تتحدث عن نفسك. واضح ومختصر."
+            f"قواعد: لا تخترع تراكات غير المذكورة أعلاه ولا تحذف أيًّا منها. لا نسب أو أرقام تقييم. "
+            f"اربط كل استنتاج بإجابات {n}. خاطبه بصيغة \"أنت\" طوال التقرير. واضح ومختصر."
         )
     else:
         college_results_text = "نتائج البحث — الكليات والأقسام:\n\n"
@@ -350,19 +417,24 @@ def _final_report_prompt(session: InterviewSession, answers_summary: str,
             f"مع {n}، والآن تقدّم له تقريرك النهائي مخاطباً إياه مباشرة."
         )
         user = (
-            f"الطالب الذي قابلته اسمه: {n} — طالب ثانوية\n\n"
+            f"الطالب الذي قابلته اسمه: {n} — خريج ثانوية مقبل على الجامعة\n\n"
             f"إجابات {n} في المقابلة:\n{answers_summary}\n\n"
             f"تحليل الاهتمامات الأكاديمية:\n{json.dumps(college_kw, ensure_ascii=False, indent=2)}\n\n"
             f"تحليل الميول المهنية:\n{json.dumps(track_kw, ensure_ascii=False, indent=2)}\n\n"
             f"{college_results_text}\n"
             f"{track_results_text}\n"
+            "الكليات الثلاث المرشّحة (إلزامي استخدامها كما هي بالضبط وبنفس الترتيب):\n"
+            f"{college_list}\n\n"
+            "التراكات الثلاثة المرشّحة (إلزامي استخدامها كما هي بالضبط وبنفس الترتيب، بنفس الأسماء حرفياً):\n"
+            f"{track_list}\n\n"
             f"اكتب الآن تقريراً موجهاً إلى {n} مباشرة بصيغة المخاطب (أنت، إجاباتك، يناسبك)، ويحتوي على:\n"
             "1) تحليل أكاديمي ومهني لك (فقرتان)\n"
-            "2) أفضل 3 كليات/أقسام نرشّحها لك (الاسم الكامل: جامعة + كلية + قسم، لماذا تناسبك، مواد، مهارات، مسارات، تحدٍ)\n"
-            "3) أفضل 3 تراكات تدريبية تكمّل دراستك (الاسم الرسمي، كيف يدعمك، مدة، مهارات، قيمة مضافة)\n"
+            "2) الكليات الثلاث المرشّحة أعلاه بالضبط (نفس الأسماء والترتيب) — لكل كلية: لماذا تناسبك، مواد، مهارات، مسارات، تحدٍ\n"
+            "3) التراكات الثلاثة المرشّحة أعلاه بالضبط (نفس الأسماء والترتيب) — لكل تراك: كيف يدعمك، مدة، مهارات، قيمة مضافة\n"
             "4) نصائح عملية لك (3-4 نقاط)\n"
             "5) موارد مقترحة\n\n"
-            f"قواعد: لا نسب أو أرقام. اربط كل توصية بإجابات {n}. خاطبه بصيغة \"أنت\" طوال التقرير. واضح ومختصر."
+            f"قواعد: لا تخترع كليات أو تراكات غير المذكورة أعلاه ولا تحذف أيًّا منها. لا نسب أو أرقام. "
+            f"اربط كل توصية بإجابات {n}. خاطبه بصيغة \"أنت\" طوال التقرير. واضح ومختصر."
         )
 
     return system, user
@@ -577,35 +649,32 @@ class InterviewEngine:
                 _college_keywords_prompt(answers_summary, user_name)
             )
 
-        # ── 2. Vector search ──────────────────────────────────
-        track_query = (
-            json.dumps(track_kw, ensure_ascii=False)
-            if track_kw else answers_summary
-        )
-        track_results = self._search(self._track_vs, track_query, k=5)
+        # ── 2. Vector search (focused query → better relevance) ──────
+        track_query = _focused_query(track_kw, "preferred_tracks") or answers_summary
+        track_results = self._search(self._track_vs, track_query, k=8)
 
         college_results = []
         if path_type == "college_and_track":
-            college_query = (
-                json.dumps(college_kw, ensure_ascii=False)
-                if college_kw else answers_summary
-            )
-            college_results = self._search(self._college_vs, college_query, k=5)
+            college_query = _focused_query(college_kw, "preferred_departments") or answers_summary
+            college_results = self._search(self._college_vs, college_query, k=8)
 
-        # ── 3. Final report ───────────────────────────────────
+        # ── 3. Build structured top-3 track + college suggestions FIRST ──
+        # (so the written report can be forced to use exactly the same ones)
+        suggested_tracks = self._build_suggested_tracks(track_results, track_kw)
+        suggested_track = suggested_tracks[0]["name"] if suggested_tracks else None
+        suggested_colleges = self._build_suggested_colleges(college_results)
+
+        # ── 4. Final report (must use the exact suggestions above) ──────
         sys_p, user_p = _final_report_prompt(
             session, answers_summary,
             track_kw, college_kw,
             track_results, college_results,
+            suggested_tracks, suggested_colleges,
         )
         report_text = _q_llm.invoke([
             SystemMessage(content=sys_p),
             HumanMessage(content=user_p),
         ]).content.strip()
-
-        # ── 4. Build structured top-3 track suggestions ───────
-        suggested_tracks = self._build_suggested_tracks(track_results, track_kw)
-        suggested_track = suggested_tracks[0]["name"] if suggested_tracks else None
 
         return {
             "report":            report_text,
@@ -614,12 +683,38 @@ class InterviewEngine:
             "track_results":     [r["metadata"] for r in track_results],
             "college_results":   [r["metadata"] for r in college_results],
             "suggested_track":   suggested_track,
-            "suggested_tracks":  suggested_tracks,   # [{name, name_ar}] — top 3
+            "suggested_tracks":  suggested_tracks,    # [{name, name_ar}] — top 3
+            "suggested_colleges": suggested_colleges,  # [{name, university, faculty, department}] — top 3
             "answers":           list(session.conversation_history),
             "path_type":         path_type,
             "user_name":         user_name,
             "email":             session.email,
         }
+
+    def _build_suggested_colleges(self, college_results: list) -> list:
+        """Return up to 3 unique college/department suggestions from the vector results."""
+        out, seen = [], set()
+        for r in college_results:
+            meta = r.get("metadata", {})
+            university = (meta.get("university") or "").strip()
+            faculty    = (meta.get("faculty") or "").strip()
+            department = (meta.get("department") or "").strip()
+            parts = [p for p in (university, faculty, department) if p]
+            if not parts:
+                continue
+            name = " - ".join(parts)
+            key = name.lower()
+            if key not in seen:
+                seen.add(key)
+                out.append({
+                    "name": name,
+                    "university": university,
+                    "faculty": faculty,
+                    "department": department,
+                })
+            if len(out) >= 3:
+                break
+        return out
 
     def _build_suggested_tracks(self, track_results: list, track_kw: Optional[dict]) -> list:
         """Return up to 3 unique {name, name_ar} suggestions from the vector results."""

@@ -44,7 +44,7 @@
 }
 
 .navbar-brand { display: flex; align-items: center; gap: 10px; cursor: pointer; }
-.logo-image { height: 38px; filter: drop-shadow(0 2px 10px rgba(47,111,237,0.5)); }
+.logo-image { height: 58px; filter: drop-shadow(0 2px 10px rgba(47,111,237,0.45)); }
 .logo-text {
   font-family: var(--ep-font-display);
   font-size: 26px;

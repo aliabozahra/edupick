@@ -26,10 +26,14 @@
 .nb-brand:hover { transform: translateY(-1px); }
 
 .nb-logo {
-  width: 32px;
-  height: 32px;
+  height: 48px;
+  width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(47, 111, 237, 0.5));
+  filter: drop-shadow(0 2px 8px rgba(47, 111, 237, 0.45));
+}
+/* Soft glow so the logo stands out on dark backgrounds */
+:root[data-theme="dark"] .nb-logo {
+  filter: drop-shadow(0 0 9px rgba(93, 168, 245, 0.7)) drop-shadow(0 0 3px rgba(255, 255, 255, 0.4));
 }
 
 .nb-site-name {

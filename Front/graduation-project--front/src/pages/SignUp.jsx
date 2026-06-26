@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import '../styles/common.css';
 import '../styles/auth.css';
-import logo from '../assets/logo.png';
+import logo from '../assets/logo2-removebg.png';
 
 function SignUp() {
   const [name, setName] = useState("");

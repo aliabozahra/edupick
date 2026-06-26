@@ -4,7 +4,7 @@ import {
   FaUserPlus, FaMicrophone, FaMapSigns, FaClipboardList,
   FaRobot, FaBalanceScale, FaChartLine,
 } from "react-icons/fa";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo2-removebg.png";
 import "./Footer.css";
 
 const STEPS = [

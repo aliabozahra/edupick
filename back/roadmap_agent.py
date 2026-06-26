@@ -8,14 +8,16 @@ import os
 import re
 import json
 import uuid
-from typing import Optional, List, Literal
+import urllib.parse
+from typing import Optional, List, Literal, Dict
+import requests
 from pydantic import BaseModel, Field
 from crewai import Agent, Task, Crew, Process
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from llms import crew_llm_4m
+from llms import crew_llm_groq as crew_llm_4m  # using Groq now (others kept in llms.py for later)
 
 # ══════════════════════════════════════════════════════════════
 # Pydantic Schema
@@ -25,6 +27,12 @@ class ResourceItem(BaseModel):
     title: str
     url: Optional[str] = None
     type: str = "article"  # "video" | "article" | "course" | "book" | "practice"
+
+
+class QuizQuestion(BaseModel):
+    question: str
+    options: Dict[str, str] = Field(default_factory=dict)  # {"A": "...", "B": "...", ...}
+    answer: str = "A"
 
 
 class RoadmapTask(BaseModel):
@@ -42,6 +50,7 @@ class RoadmapPhase(BaseModel):
     description: str
     duration: str
     tasks: List[RoadmapTask]
+    quiz: List[QuizQuestion] = Field(default_factory=list)  # per-phase MCQ quiz
 
 
 class RoadmapOutput(BaseModel):
@@ -286,6 +295,112 @@ def _parse_output(raw: str, track: str, level: str, goal: str) -> RoadmapOutput:
 
 
 # ══════════════════════════════════════════════════════════════
+# Enrichment: real resources (Serper) + per-phase quizzes (Groq)
+# ══════════════════════════════════════════════════════════════
+
+def _serper_search(query: str, num: int = 1) -> list:
+    """Return real organic web results from Serper (or [] if unavailable)."""
+    key = os.environ.get("SERPER_API_KEY", "")
+    if not key:
+        return []
+    try:
+        resp = requests.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": key, "Content-Type": "application/json"},
+            json={"q": query, "num": num},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        return resp.json().get("organic", [])[:num]
+    except Exception:
+        return []
+
+
+def _real_resources(topic: str, track: str) -> list:
+    """Build a small set of REAL/guaranteed-loading resources for one topic:
+    a real article (Serper), a YouTube search, and a course search."""
+    q = urllib.parse.quote_plus(f"{topic} {track}".strip())
+    out = []
+    organic = _serper_search(f"{topic} {track} tutorial guide", 1)
+    if organic:
+        item = organic[0]
+        link = item.get("link", "")
+        if link:
+            out.append({"title": (item.get("title") or "Article")[:120], "url": link, "type": "article"})
+    out.append({"title": f"{topic} — video tutorials", "url": f"https://www.youtube.com/results?search_query={q}", "type": "video"})
+    out.append({"title": f"{topic} — courses", "url": f"https://www.coursera.org/search?query={q}", "type": "course"})
+    return out
+
+
+def _attach_real_resources(data: dict, track: str) -> dict:
+    """Replace each task's resources with real, verified-to-load links."""
+    for phase in data.get("phases", []):
+        for tk in phase.get("tasks", []):
+            title = (tk.get("title") or "").strip()
+            if title:
+                try:
+                    tk["resources"] = _real_resources(title, track)
+                except Exception as exc:
+                    print(f"[RoadmapAgent] resource error for '{title}': {exc}")
+    return data
+
+
+def _groq_client():
+    try:
+        from groq import Groq
+        key = os.environ.get("GROQ_API_KEY", "")
+        return Groq(api_key=key) if key else None
+    except Exception:
+        return None
+
+
+def _attach_phase_quizzes(data: dict, track: str) -> dict:
+    """Generate a short MCQ quiz for each phase (Groq JSON mode)."""
+    client = _groq_client()
+    if client is None:
+        return data
+    for phase in data.get("phases", []):
+        topics = ", ".join(t.get("title", "") for t in phase.get("tasks", []))[:400]
+        title = phase.get("title", "")
+        prompt = (
+            f'Create exactly 4 multiple-choice questions to test a learner AFTER completing the phase '
+            f'"{title}" in the field "{track}". Topics covered in this phase: {topics}.\n'
+            "Each question has 4 options (A, B, C, D) and exactly one correct answer.\n"
+            'Return ONLY valid JSON: {"questions":[{"question":"...","options":'
+            '{"A":"...","B":"...","C":"...","D":"..."},"answer":"A"}]}'
+        )
+        try:
+            resp = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are an expert quiz creator. Return valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                max_tokens=1600,
+                response_format={"type": "json_object"},
+            )
+            qs = json.loads(resp.choices[0].message.content).get("questions", [])
+            phase["quiz"] = qs[:5]
+        except Exception as exc:
+            print(f"[RoadmapAgent] phase quiz error for '{title}': {exc}")
+            phase["quiz"] = []
+    return data
+
+
+def _enrich_roadmap(roadmap: RoadmapOutput, track: str) -> RoadmapOutput:
+    """Best-effort: add real resources + per-phase quizzes. Never raises."""
+    try:
+        data = roadmap.model_dump()
+        data = _attach_real_resources(data, track)
+        data = _attach_phase_quizzes(data, track)
+        return RoadmapOutput(**data)
+    except Exception as exc:
+        print(f"[RoadmapAgent] enrichment error: {exc}")
+        return roadmap
+
+
+# ══════════════════════════════════════════════════════════════
 # Main generation function
 # ══════════════════════════════════════════════════════════════
 
@@ -334,10 +449,13 @@ def generate_roadmap(
 
     try:
         result = crew.kickoff()
-        return _parse_output(result.raw, track, level, goal)
+        roadmap = _parse_output(result.raw, track, level, goal)
     except Exception as exc:
         print(f"[RoadmapAgent] Generation error: {exc}")
-        return _fallback_roadmap(track, level, goal)
+        roadmap = _fallback_roadmap(track, level, goal)
+
+    # Merge-in real resources + per-phase quizzes (best-effort)
+    return _enrich_roadmap(roadmap, track)
 
 
 def refresh_roadmap(stored_roadmap: dict, track: str, level: str, goal: str) -> RoadmapOutput:

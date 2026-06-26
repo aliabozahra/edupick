@@ -247,12 +247,50 @@
   padding: 28px;
 }
 .td-report-card h3 { font-size: 1.2rem; margin-bottom: 16px; }
-.td-report-text { color: var(--ep-text-mid); line-height: 1.75; font-size: 0.93rem; }
-.td-report-text h3, .td-report-text h4, .td-report-text h5 { color: var(--ep-text); margin: 18px 0 8px; }
-.td-report-text strong { color: var(--ep-text); display: block; margin: 12px 0 4px; }
-.td-report-text li { margin-left: 20px; margin-bottom: 6px; }
-.td-report-text hr { border: none; border-top: 1px solid var(--ep-border); margin: 16px 0; }
-.td-report-text p { margin-bottom: 8px; }
+/* ── Formatted report ── */
+.td-report-text { color: var(--ep-text-mid); line-height: 1.9; font-size: 0.95rem; }
+.td-report-text.rtl { text-align: right; }
+.td-rh { color: var(--ep-glow); font-size: 1.05rem; margin: 20px 0 10px; }
+.td-rsub { color: var(--ep-text); font-weight: 700; margin: 14px 0 6px; }
+.td-rsub strong { color: var(--ep-text); }
+.td-rp { margin-bottom: 10px; }
+.td-rp strong, .td-rbul strong { color: var(--ep-text); }
+.td-rhr { border: none; border-top: 1px solid var(--ep-border); margin: 16px 0; }
+
+/* numbered recommendation rows */
+.td-rnum {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--ep-glass-2);
+  border: 1px solid var(--ep-border);
+  border-radius: var(--ep-radius-sm);
+  padding: 12px 14px; margin: 10px 0;
+  color: var(--ep-text);
+}
+.td-report-text.rtl .td-rnum { flex-direction: row-reverse; text-align: right; }
+.td-rnum-badge {
+  flex-shrink: 0; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ep-grad); color: #fff; border-radius: 50%;
+  font-size: 0.8rem; font-weight: 700;
+}
+/* bullets */
+.td-rbul {
+  position: relative; padding-inline-start: 20px; margin: 6px 0; color: var(--ep-text-mid);
+}
+.td-rbul::before {
+  content: "•"; position: absolute; inset-inline-start: 4px; color: var(--ep-sky); font-weight: 700;
+}
+
+/* recommended colleges card */
+.td-colleges-card { background: linear-gradient(135deg, rgba(52,211,153,0.14), rgba(47,111,237,0.06)); }
+.td-college-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.td-college-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--ep-glass-2); border: 1px solid var(--ep-border-2);
+  border-radius: var(--ep-radius-sm); padding: 12px 14px;
+  font-weight: 600; color: var(--ep-text); font-size: 0.95rem;
+}
+.td-college-item svg { color: var(--ep-sky); flex-shrink: 0; }
 
 /* ── Responsive ── */
 @media (max-width: 600px) {

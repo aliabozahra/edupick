@@ -92,7 +92,7 @@
   border-top: 1px solid var(--ep-border);
 }
 .ft-brand { display: flex; align-items: center; gap: 10px; }
-.ft-brand img { width: 30px; height: 30px; object-fit: contain; }
+.ft-brand img { height: 40px; width: auto; object-fit: contain; }
 .ft-brand span {
   font-family: var(--ep-font-display); font-weight: 800; font-size: 1.1rem;
   background: var(--ep-grad-text); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;

@@ -5,7 +5,7 @@ Uses letter-frequency scoring + llm_flash for personalized description.
 """
 
 from collections import Counter
-from llms import llm_flash
+from llms import groq_llm as llm_flash  # using Groq now (OpenRouter kept in llms.py for later)
 
 # ── Track mapping (A–F) ───────────────────────────────────────
 TRACK_MAP = {

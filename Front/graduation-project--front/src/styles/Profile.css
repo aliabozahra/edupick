@@ -99,11 +99,9 @@
   padding: 18px;
   font-family: var(--ep-font-body);
   font-size: 0.9rem;
-  line-height: 1.75;
   color: var(--ep-text-mid);
-  white-space: pre-wrap;
   word-wrap: break-word;
-  max-height: 460px;
+  max-height: 520px;
   overflow-y: auto;
 }
 

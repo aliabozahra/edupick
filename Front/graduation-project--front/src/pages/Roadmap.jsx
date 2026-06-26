@@ -4,7 +4,7 @@ import {
   FaGraduationCap, FaSpinner, FaRedo, FaSave, FaPrint,
   FaCheckCircle, FaCircle, FaTimes,
   FaChevronDown, FaChevronUp, FaBook, FaVideo,
-  FaLink, FaPencilAlt, FaArrowLeft, FaShareAlt,
+  FaLink, FaPencilAlt, FaArrowLeft, FaShareAlt, FaQuestionCircle,
 } from "react-icons/fa";
 import "../styles/Roadmap.css";
 
@@ -458,7 +458,7 @@ function LoadingScreen() {
       <div className="rm-loading-card">
         <FaSpinner className="rm-spin-large" />
         <h2>Building your personalized roadmap…</h2>
-        <p>Our AI is designing a tailored learning path just for you. This may take up to 30 seconds.</p>
+        <p>Designing your path, finding real resources, and writing a quiz for each phase. This can take up to a minute.</p>
         <div className="rm-dots"><span /><span /><span /></div>
       </div>
     </div>
@@ -474,6 +474,7 @@ function RoadmapScreen({
 }) {
   const hint = roadmap.display_hint || "timeline";
   const [view, setView] = useState(hint);
+  const [quizPhase, setQuizPhase] = useState(null);
 
   return (
     <div className="rm-roadmap-page">
@@ -550,12 +551,21 @@ function RoadmapScreen({
         </div>
 
         {view === "checklist"
-          ? <ChecklistView phases={roadmap.phases} onToggleTask={onToggleTask} />
+          ? <ChecklistView phases={roadmap.phases} onToggleTask={onToggleTask} onTakeQuiz={setQuizPhase} />
           : view === "kanban"
-          ? <KanbanView    phases={roadmap.phases} onToggleTask={onToggleTask} />
-          : <TimelineView  phases={roadmap.phases} onToggleTask={onToggleTask} />
+          ? <KanbanView    phases={roadmap.phases} onToggleTask={onToggleTask} onTakeQuiz={setQuizPhase} />
+          : <TimelineView  phases={roadmap.phases} onToggleTask={onToggleTask} onTakeQuiz={setQuizPhase} />
         }
       </div>
+
+      {/* Per-phase quiz modal */}
+      {quizPhase && (
+        <PhaseQuizModal
+          phase={quizPhase}
+          track={roadmap.track}
+          onClose={() => setQuizPhase(null)}
+        />
+      )}
 
       {/* Note modal */}
       {showNoteModal && (
@@ -588,7 +598,7 @@ function RoadmapScreen({
 }
 
 // ── Timeline view ─────────────────────────────────────────────
-function TimelineView({ phases, onToggleTask }) {
+function TimelineView({ phases, onToggleTask, onTakeQuiz }) {
   return (
     <div className="rm-timeline">
       {phases.map((phase, pi) => (
@@ -608,6 +618,11 @@ function TimelineView({ phases, onToggleTask }) {
                 <TaskCard key={ti} task={task} onToggle={() => onToggleTask(pi, ti)} />
               ))}
             </div>
+            {phase.quiz?.length > 0 && (
+              <button className="rm-phase-quiz-btn rm-no-print" onClick={() => onTakeQuiz(phase)}>
+                <FaQuestionCircle /> Take phase quiz ({phase.quiz.length} Qs)
+              </button>
+            )}
           </div>
         </div>
       ))}
@@ -616,7 +631,7 @@ function TimelineView({ phases, onToggleTask }) {
 }
 
 // ── Kanban view ───────────────────────────────────────────────
-function KanbanView({ phases, onToggleTask }) {
+function KanbanView({ phases, onToggleTask, onTakeQuiz }) {
   return (
     <div className="rm-kanban">
       {phases.map((phase, pi) => {
@@ -657,6 +672,11 @@ function KanbanView({ phases, onToggleTask }) {
                 </div>
               ))}
             </div>
+            {phase.quiz?.length > 0 && (
+              <button className="rm-phase-quiz-btn rm-phase-quiz-btn--sm" onClick={() => onTakeQuiz(phase)}>
+                <FaQuestionCircle /> Quiz
+              </button>
+            )}
           </div>
         );
       })}
@@ -665,7 +685,7 @@ function KanbanView({ phases, onToggleTask }) {
 }
 
 // ── Checklist view ────────────────────────────────────────────
-function ChecklistView({ phases, onToggleTask }) {
+function ChecklistView({ phases, onToggleTask, onTakeQuiz }) {
   const [open, setOpen] = useState(() => phases.map(() => true));
   const toggle = idx => setOpen(prev => prev.map((v, i) => i === idx ? !v : v));
 
@@ -686,10 +706,108 @@ function ChecklistView({ phases, onToggleTask }) {
               {phase.tasks.map((task, ti) => (
                 <TaskCard key={ti} task={task} onToggle={() => onToggleTask(pi, ti)} />
               ))}
+              {phase.quiz?.length > 0 && (
+                <button className="rm-phase-quiz-btn rm-no-print" onClick={() => onTakeQuiz(phase)}>
+                  <FaQuestionCircle /> Take phase quiz ({phase.quiz.length} Qs)
+                </button>
+              )}
             </div>
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Per-phase quiz modal ──────────────────────────────────────
+function PhaseQuizModal({ phase, track, onClose }) {
+  const [answers, setAnswers] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
+  const email = localStorage.getItem("userEmail") || "";
+  const questions = phase.quiz || [];
+
+  const score = questions.reduce((acc, q, i) => acc + (answers[i] === q.answer ? 1 : 0), 0);
+  const total = questions.length;
+  const pct   = total ? Math.round((score / total) * 100) : 0;
+  const answered = Object.keys(answers).length;
+
+  const submit = async () => {
+    setSubmitted(true);
+    if (!email) return;
+    setSaveState("saving");
+    try {
+      await fetch(`${API_URL}/topic-quiz/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email, topic: phase.title, score, total, lang: "en",
+          name: `${track} — ${phase.title}`, source: "roadmap", track,
+        }),
+      });
+      setSaveState("saved");
+    } catch { setSaveState("idle"); }
+  };
+
+  return (
+    <div className="rm-overlay" onClick={onClose}>
+      <div className="rm-modal rm-quiz-modal" onClick={e => e.stopPropagation()}>
+        <div className="rm-modal-head">
+          <h3>Phase Quiz — {phase.title}</h3>
+          <button className="rm-modal-close" onClick={onClose}><FaTimes /></button>
+        </div>
+
+        {!submitted ? (
+          <>
+            <div className="rm-quiz-body">
+              {questions.map((q, i) => (
+                <div key={i} className="rm-quiz-q">
+                  <p className="rm-quiz-qtext"><strong>{i + 1}.</strong> {q.question}</p>
+                  <div className="rm-quiz-opts">
+                    {Object.entries(q.options || {}).map(([key, text]) => (
+                      <button
+                        key={key}
+                        className={`rm-quiz-opt${answers[i] === key ? " selected" : ""}`}
+                        onClick={() => setAnswers(a => ({ ...a, [i]: key }))}
+                      >
+                        <span className="rm-quiz-key">{key}</span> {text}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="rm-modal-foot">
+              <span className="rm-quiz-count">{answered}/{total} answered</span>
+              <button className="rm-action-btn rm-btn-primary" onClick={submit} disabled={answered < total}>
+                Submit
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="rm-quiz-result">
+            <div className="rm-quiz-score">{pct}%</div>
+            <p>You scored <strong>{score}/{total}</strong>.</p>
+            {questions.map((q, i) => {
+              const ok = answers[i] === q.answer;
+              return (
+                <div key={i} className={`rm-quiz-review ${ok ? "ok" : "no"}`}>
+                  <span>{q.question}</span>
+                  {!ok && <span className="rm-quiz-correct">Correct: {q.answer}) {q.options?.[q.answer]}</span>}
+                </div>
+              );
+            })}
+            <p className="rm-quiz-saved">
+              {saveState === "saved" ? "✓ Saved to your quiz history."
+                : saveState === "saving" ? "Saving…"
+                : email ? "" : "Log in to save this result."}
+            </p>
+            <div className="rm-modal-foot">
+              <button className="rm-action-btn rm-btn-outline" onClick={onClose}>Close</button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

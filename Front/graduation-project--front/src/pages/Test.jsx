@@ -2,7 +2,7 @@ import React from 'react';
 import '../styles/test.css';
 import { useNavigate } from "react-router-dom";
 import {
-  FaClipboardList, FaCompass, FaHistory, FaArrowRight,
+  FaClipboardList, FaHistory, FaArrowRight,
 } from "react-icons/fa";
 
 const OPTIONS = [
@@ -14,15 +14,9 @@ const OPTIONS = [
     primary: true,
   },
   {
-    icon: <FaCompass />,
-    title: "Career aptitude test",
-    text: "Not sure where to start? Answer a few questions to discover the field that fits you best.",
-    to: "/test/main-test",
-  },
-  {
     icon: <FaHistory />,
     title: "Previous results",
-    text: "Review your past quiz attempts and track how your matches evolve over time.",
+    text: "Review your past quiz attempts and track your scores over time.",
     to: "/test/previous-results",
   },
 ];

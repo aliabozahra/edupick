@@ -3,7 +3,7 @@ import { API_URL } from "../config";
 import { Link, useNavigate } from "react-router-dom";
 import "../styles/common.css";
 import "../styles/auth.css";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo2-removebg.png";
 
 function ForgetPassword() {
   const [email, setEmail] = useState("");

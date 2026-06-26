@@ -59,6 +59,7 @@
   animation: ep-fade-up 0.5s var(--ep-ease) both;
 }
 .db-card:hover { transform: translateY(-5px); border-color: var(--ep-border-2); box-shadow: var(--ep-glow-sky); }
+.db-card--clickable { cursor: pointer; }
 .db-card::after {
   content: "";
   position: absolute;

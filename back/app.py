@@ -2,7 +2,7 @@ from bson import ObjectId
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from crewai import Task , Crew , Process
-from comparison_tool import llm, LANG_CONFIG, search_web, create_comparator_agent
+from comparison_tool import LANG_CONFIG, run_comparison
 import os
 import json
 from dotenv import load_dotenv
@@ -215,16 +215,16 @@ def dashboard():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    # ── Quiz stats ─────────────────────────────────────────────────────────────
-    quiz_docs = list(quiz_collection.find(
+    # ── Quiz stats (topic quizzes + per-phase roadmap quizzes) ─────────────────
+    quiz_docs = list(topic_quiz_collection.find(
         {"email": email},
-        {"result.match_pct": 1, "result.top_track": 1, "submitted_at": 1}
+        {"percentage": 1, "test_name": 1, "topic": 1, "source": 1, "submitted_at": 1}
     ).sort("submitted_at", -1))
 
     quiz_count = len(quiz_docs)
     quiz_avg   = 0
     if quiz_count:
-        pcts     = [d.get("result", {}).get("match_pct", 0) for d in quiz_docs]
+        pcts     = [d.get("percentage", 0) for d in quiz_docs]
         quiz_avg = round(sum(pcts) / quiz_count)
 
     # ── Roadmap stats ──────────────────────────────────────────────────────────
@@ -251,10 +251,11 @@ def dashboard():
     # ── Recent activity (quiz + roadmap saves, sorted newest first) ────────────
     activity_items = []
     for d in quiz_docs[:5]:
-        track = d.get("result", {}).get("top_track", "Career Quiz")
+        name = d.get("test_name") or d.get("topic", "Quiz")
+        kind = "roadmap quiz" if d.get("source") == "roadmap" else "topic quiz"
         ts    = d.get("submitted_at")
         date  = ts.strftime("%b %d") if hasattr(ts, "strftime") else ""
-        label = f"Took career quiz → {track}" + (f"  ({date})" if date else "")
+        label = f"Took {kind} → {name}" + (f"  ({date})" if date else "")
         activity_items.append((ts or datetime.min, label))
 
     for rm in roadmap_docs[:5]:
@@ -718,29 +719,33 @@ def interview_answer():
 
     # If session completed, persist the full interview + suggestions
     if result.get("done") and result.get("result"):
-        res             = result["result"]
-        email           = res.get("email") or data.get("email")
-        suggested_track = res.get("suggested_track")
+        res              = result["result"]
+        email            = res.get("email") or data.get("email")
+        suggested_track  = res.get("suggested_track")
         suggested_tracks = res.get("suggested_tracks", [])
+        suggested_colleges = res.get("suggested_colleges", [])
 
         if email:
             interview_collection.insert_one({
-                "email":            email,
-                "user_name":        res.get("user_name"),
-                "path_type":        res.get("path_type"),
-                "report":           res.get("report"),
-                "answers":          res.get("answers", []),
-                "suggested_track":  suggested_track,
-                "suggested_tracks": suggested_tracks,
-                "track_keywords":   res.get("track_keywords"),
-                "college_results":  res.get("college_results", []),
-                "submitted_at":     datetime.utcnow(),
+                "email":              email,
+                "user_name":          res.get("user_name"),
+                "path_type":          res.get("path_type"),
+                "report":             res.get("report"),
+                "answers":            res.get("answers", []),
+                "suggested_track":    suggested_track,
+                "suggested_tracks":   suggested_tracks,
+                "suggested_colleges": suggested_colleges,
+                "track_keywords":     res.get("track_keywords"),
+                "college_results":    res.get("college_results", []),
+                "submitted_at":       datetime.utcnow(),
             })
             update = {}
             if suggested_track:
                 update["suggested_track"] = suggested_track
             if suggested_tracks:
                 update["suggested_tracks"] = suggested_tracks
+            if suggested_colleges:
+                update["suggested_colleges"] = suggested_colleges
             if update:
                 users_collection.update_one({"email": email}, {"$set": update})
 
@@ -835,7 +840,7 @@ def profile():
     interview = interview_collection.find_one(
         {"email": email},
         {"_id": 0, "report": 1, "suggested_track": 1, "suggested_tracks": 1,
-         "path_type": 1, "answers": 1, "submitted_at": 1},
+         "suggested_colleges": 1, "path_type": 1, "answers": 1, "submitted_at": 1},
         sort=[("submitted_at", -1)],
     )
     if interview:
@@ -850,6 +855,7 @@ def profile():
         "study_level":     user.get("study_level"),
         "suggested_track": user.get("suggested_track", ""),
         "suggested_tracks": user.get("suggested_tracks", []),
+        "suggested_colleges": user.get("suggested_colleges", []),
         "roadmaps":        roadmaps,
         "quizzes":         quizzes,
         "topic_quizzes":   topic_docs,
@@ -878,22 +884,8 @@ def compare():
             if n.strip() in cfg['criteria']
         ])
 
-        comparator = create_comparator_agent(lang)
-        task = Task(
-            description=cfg['task_prompt'].format(
-                tracks=tracks, location=location,
-                currency=currency, year=year, criteria=criteria
-            ),
-            expected_output=cfg['expected_output'],
-            agent=comparator
-        )
-        crew = Crew(agents=[comparator], tasks=[task], process=Process.sequential, verbose=False)
-        result = crew.kickoff(inputs={
-            "tracks": tracks, "location": location,
-            "currency": currency, "year": year, "criteria": criteria
-        })
-
-        return jsonify({"result": result.raw}), 200
+        raw = run_comparison(tracks, location, currency, year, criteria, lang)
+        return jsonify({"result": raw}), 200
 
     except Exception as e:
         print("Comparison error:", e)
@@ -1033,6 +1025,9 @@ def topic_quiz_save():
     total     = int(data.get("total", 0))
     lang      = data.get("lang", "en")
     test_name = (data.get("name") or topic or "Topic Quiz").strip()
+    # source: "topic" (manual/topic quiz) or "roadmap" (per-phase roadmap quiz)
+    source    = (data.get("source") or "topic").strip()
+    track     = (data.get("track") or "").strip()
 
     if not email or not topic:
         return jsonify({"error": "email and topic are required"}), 400
@@ -1044,6 +1039,8 @@ def topic_quiz_save():
         "total":        total,
         "lang":         lang,
         "test_name":    test_name,
+        "source":       source,
+        "track":        track,
         "percentage":   round(score / total * 100) if total else 0,
         "submitted_at": datetime.utcnow(),
     })

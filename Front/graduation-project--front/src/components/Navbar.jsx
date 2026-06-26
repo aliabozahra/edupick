@@ -5,7 +5,7 @@ import {
 } from "react-icons/fa";
 import ThemeToggle from "./ThemeToggle";
 import "./Navbar.css";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo2-removebg.png";
 
 const LINKS = [
   { to: "/dashboard",      label: "Dashboard",   icon: <FaThLarge /> },
@@ -34,7 +34,6 @@ export default function Navbar() {
     <nav className="nb-nav">
       <div className="nb-brand" onClick={() => navigate("/dashboard")}>
         <img src={logo} alt="EduPick" className="nb-logo" />
-        <span className="nb-site-name">EduPick</span>
       </div>
 
       <ul className="nb-links">

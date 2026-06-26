@@ -97,7 +97,7 @@ function parseResult(raw) {
   if (match) {
     try {
       const data = JSON.parse(match[0]);
-      if (data.comparison && data.tracks) return { type: 'json', data };
+      if ((data.rows || data.comparison) && data.tracks) return { type: 'json', data };
     } catch {}
   }
 
@@ -394,14 +394,31 @@ function resolveCell(trackData, track, index) {
 
 // ── Structured JSON result ────────────────────────────────────
 function ComparisonResult({ data, t, lang, onCreateRoadmap }) {
-  const { comparison, insights } = data;
-  // Derive tracks from the comparison data itself when the top-level list is
-  // missing or mismatched — guarantees every column has data.
+  const { insights } = data;
   let tracks = Array.isArray(data.tracks) ? data.tracks.filter(Boolean) : [];
-  if (comparison) {
-    const firstRow = Object.values(comparison)[0];
+
+  // Normalize to position-based rows: [{ criterion, cells:[{value,source}, ...] }]
+  let rows = [];
+  if (Array.isArray(data.rows)) {
+    rows = data.rows.map(r => ({
+      criterion: r.criterion || r.name || '',
+      cells: Array.isArray(r.cells) ? r.cells : [],
+    }));
+  } else if (data.comparison && typeof data.comparison === 'object') {
+    // Fallback for the older nested-key schema
+    const firstRow = Object.values(data.comparison)[0];
     const rowKeys = firstRow && typeof firstRow === 'object' ? Object.keys(firstRow) : [];
     if (rowKeys.length > tracks.length) tracks = rowKeys;
+    rows = Object.entries(data.comparison).map(([criterion, td]) => ({
+      criterion,
+      cells: tracks.map((tr, i) => resolveCell(td, tr, i)),
+    }));
+  }
+
+  // Safety: if track names are missing, infer the count from the rows
+  if (!tracks.length && rows.length) {
+    const n = Math.max(...rows.map(r => r.cells.length));
+    tracks = Array.from({ length: n }, (_, i) => `Track ${i + 1}`);
   }
 
   return (
@@ -430,56 +447,48 @@ function ComparisonResult({ data, t, lang, onCreateRoadmap }) {
         </div>
       )}
 
-      {/* Comparison table */}
-      {comparison && tracks?.length > 0 && (
-        <div className="comparison-table-container">
-          <table className="comparison-table">
-            <thead>
-              <tr>
-                <th className="metric-header">{lang === 'ar' ? 'المعيار' : 'Criterion'}</th>
-                {tracks.map((track, i) => (
-                  <th key={i}>{track}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(comparison).map(([criterion, trackData], ri) => (
-                <tr key={ri}>
-                  <td className="metric-label">{criterion}</td>
-                  {tracks.map((track, ti) => {
-                    const cell = resolveCell(trackData, track, ti);
-                    return (
-                      <td key={ti} className="ct-cell">
-                        <span className="ct-cell-value">{cell.value || '—'}</span>
-                        {cell.source && (
-                          <a
-                            href={cell.source}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="ct-source-link"
-                          >
-                            {t.source} ↗
-                          </a>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Comparison — card grid (one card per track, per criterion) */}
+      {rows.length > 0 && tracks.length > 0 && (
+        <div className="ct-compare">
+          {/* track legend */}
+          <div className="ct-legend" style={{ gridTemplateColumns: `repeat(${tracks.length}, minmax(0, 1fr))` }}>
+            {tracks.map((track, i) => (
+              <div key={i} className={`ct-legend-item ct-legend-${i % 4}`}>
+                <span className="ct-legend-dot" />
+                <span className="ct-legend-name">{track}</span>
+              </div>
+            ))}
+          </div>
+
+          {rows.map((row, ri) => (
+            <div key={ri} className="ct-crit-block">
+              <div className="ct-crit-name">{row.criterion}</div>
+              <div className="ct-crit-cards" style={{ gridTemplateColumns: `repeat(${tracks.length}, minmax(0, 1fr))` }}>
+                {tracks.map((track, ti) => {
+                  const cell = row.cells[ti] || {};
+                  return (
+                    <div key={ti} className={`ct-cell-card ct-legend-${ti % 4}`}>
+                      <div className="ct-cell-track">{track}</div>
+                      <div className="ct-cell-val">{cell.value || '—'}</div>
+                      {cell.source && (
+                        <a href={cell.source} target="_blank" rel="noreferrer" className="ct-source-link">
+                          {t.source} ↗
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       {/* Create roadmap buttons */}
-      {tracks?.length > 0 && (
+      {tracks.length > 0 && (
         <div className="ct-roadmap-row">
           {tracks.map((track, i) => (
-            <button
-              key={i}
-              className="ct-roadmap-btn"
-              onClick={() => onCreateRoadmap(track)}
-            >
+            <button key={i} className="ct-roadmap-btn" onClick={() => onCreateRoadmap(track)}>
               🗺 {t.createRoadmap}: {track}
             </button>
           ))}

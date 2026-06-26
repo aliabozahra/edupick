@@ -309,10 +309,50 @@ function AnalyzingScreen({ userName }) {
   );
 }
 
+// ── Report rendering helpers ───────────────────────────────────
+function isArabicText(s) { return /[؀-ۿ]/.test(s || ""); }
+
+function InlineText({ text }) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) =>
+    p.startsWith("**") && p.endsWith("**")
+      ? <strong key={i}>{p.slice(2, -2)}</strong>
+      : <React.Fragment key={i}>{p}</React.Fragment>
+  );
+}
+
+export function ReportView({ report }) {
+  const rtl = isArabicText(report);
+  const out = [];
+  String(report || "").split("\n").forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    if (/^[─—_]{3,}$/.test(line)) { out.push(<hr key={i} className="td-rhr" />); return; }
+    if (/^#{1,6}\s/.test(line)) { out.push(<h4 key={i} className="td-rh">{line.replace(/^#{1,6}\s*/, "")}</h4>); return; }
+    const num = line.match(/^(\d+)[.)]\s+(.*)/);
+    if (num) {
+      out.push(
+        <div key={i} className="td-rnum">
+          <span className="td-rnum-badge">{num[1]}</span>
+          <span><InlineText text={num[2]} /></span>
+        </div>
+      );
+      return;
+    }
+    if (/^[-•*]\s+/.test(line)) { out.push(<div key={i} className="td-rbul"><InlineText text={line.replace(/^[-•*]\s+/, "")} /></div>); return; }
+    if (/^\*\*[^*]+\*\*$/.test(line) || (line.endsWith(":") && line.length < 60) || (line.endsWith("："))) {
+      out.push(<p key={i} className="td-rsub"><InlineText text={line} /></p>); return;
+    }
+    out.push(<p key={i} className="td-rp"><InlineText text={line} /></p>);
+  });
+  return <div className={`td-report-text ${rtl ? "rtl" : ""}`} dir={rtl ? "rtl" : "ltr"}>{out}</div>;
+}
+
 function ResultScreen({ result, handleCreateRoadmap }) {
   if (!result) return null;
 
-  const { report, suggested_track, suggested_tracks = [], user_name } = result;
+  const { report, suggested_track, suggested_tracks = [],
+          suggested_colleges = [], user_name } = result;
   const topTrack = suggested_track || suggested_tracks[0]?.name;
   const otherTracks = suggested_tracks.filter(t => t.name !== topTrack);
 
@@ -326,6 +366,21 @@ function ResultScreen({ result, handleCreateRoadmap }) {
         </div>
 
         <h1>Your Personalized Report, {user_name}</h1>
+
+        {/* Recommended colleges (college + track path) */}
+        {suggested_colleges.length > 0 && (
+          <div className="td-recommended-card td-colleges-card">
+            <div className="td-rec-label">Recommended Colleges</div>
+            <div className="td-college-list">
+              {suggested_colleges.map((c, i) => (
+                <div key={i} className="td-college-item">
+                  <FaGraduationCap />
+                  <span>{c.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Top recommendation card */}
         {topTrack && (
@@ -357,18 +412,7 @@ function ResultScreen({ result, handleCreateRoadmap }) {
         {/* Full report */}
         <div className="td-report-card">
           <h3>Detailed Analysis</h3>
-          <div className="td-report-text">
-            {report.split("\n").map((line, i) => {
-              if (line.startsWith("####")) return <h5 key={i}>{line.replace(/^####\s*/, "")}</h5>;
-              if (line.startsWith("###"))  return <h4 key={i}>{line.replace(/^###\s*/, "")}</h4>;
-              if (line.startsWith("##"))   return <h3 key={i}>{line.replace(/^##\s*/, "")}</h3>;
-              if (line.startsWith("**") && line.endsWith("**")) return <strong key={i}>{line.replace(/\*\*/g, "")}</strong>;
-              if (line.startsWith("- ") || line.startsWith("• ")) return <li key={i}>{line.replace(/^[-•]\s*/, "")}</li>;
-              if (line.trim() === "────────────────────" || line.trim().startsWith("─")) return <hr key={i} />;
-              if (!line.trim()) return <br key={i} />;
-              return <p key={i}>{line}</p>;
-            })}
-          </div>
+          <ReportView report={report} />
         </div>
       </div>
     </div>

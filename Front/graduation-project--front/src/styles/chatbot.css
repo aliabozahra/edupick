@@ -21,7 +21,11 @@
   -webkit-backdrop-filter: blur(14px);
 }
 .chat-page .brand { display: flex; align-items: center; gap: 10px; }
-.chat-page .brand img { width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(47,111,237,0.5)); }
+.chat-page .brand img { height: 48px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(47,111,237,0.5)); }
+/* Soft glow so the assistant logo stands out on dark backgrounds */
+:root[data-theme="dark"] .chat-page .brand img {
+  filter: drop-shadow(0 0 9px rgba(93,168,245,0.7)) drop-shadow(0 0 3px rgba(255,255,255,0.4));
+}
 .chat-page .brand h2 {
   font-size: 18px;
   background: var(--ep-grad-text);

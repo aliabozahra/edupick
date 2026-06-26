@@ -64,6 +64,16 @@ def make_crew_llm(model: str, temp: float = 0.3):
     )
 
 
+def make_crew_groq(model: str = "llama-3.3-70b-versatile", temp: float = 0.3):
+    """Create a CrewAI LLM pointed at Groq (via litellm's `groq/` provider)."""
+    from crewai import LLM
+    return LLM(
+        model=f"groq/{model}",
+        api_key=os.environ.get("GROQ_API_KEY", ""),
+        temperature=temp,
+    )
+
+
 # Shorthand alias used in user's pattern
 _or = make_openrouter
 
@@ -90,3 +100,7 @@ gemini_llm = make_groq("llama-3.3-70b-versatile", temp=0.3)  # Groq fallback (no
 # ---------------------------------------------------------------------------
 crew_llm_4m    = make_crew_llm("openai/gpt-4.1-mini",          temp=0.3)
 crew_llm_flash = make_crew_llm("google/gemini-2.5-flash-lite", temp=0.3)
+
+# CrewAI LLM on Groq (currently the default for all agents — keep the
+# OpenRouter/Gemini ones above for switching back later).
+crew_llm_groq  = make_crew_groq("llama-3.3-70b-versatile",     temp=0.3)

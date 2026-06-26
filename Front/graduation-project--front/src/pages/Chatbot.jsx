@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaRobot, FaUserCircle, FaPaperPlane, FaBars, FaTimes } from "react-icons/fa";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo2-removebg.png";
 import "../styles/chatbot.css";
 
 import { API_URL } from "../config";
@@ -124,10 +124,6 @@ export default function Chatbot() {
       <div className="header">
         <div className="brand">
           <img src={logo} alt="EduPick AI" onError={e => e.target.style.display="none"} />
-          <div>
-            <h2>EduPick AI</h2>
-            <span>Learning Assistant</span>
-          </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

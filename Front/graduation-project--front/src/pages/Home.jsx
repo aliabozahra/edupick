@@ -14,7 +14,7 @@ import {
   FaClipboardList,
   FaArrowRight,
 } from "react-icons/fa";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo2-removebg.png";
 import Footer from "../components/Footer";
 import ThemeToggle from "../components/ThemeToggle";
 import "../styles/Home.css";

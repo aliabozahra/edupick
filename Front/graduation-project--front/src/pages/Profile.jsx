@@ -5,6 +5,7 @@ import {
   FaMicrophone, FaGraduationCap, FaBriefcase,
 } from "react-icons/fa";
 import "../styles/Profile.css";
+import { ReportView } from "./TrackDiscovery";
 
 import { API_URL as API } from "../config";
 
@@ -45,7 +46,9 @@ export default function Profile() {
   if (!data)   return <div className="pf-loading"><p>Could not load profile.</p></div>;
 
   const { name, age, status, study_level, suggested_track,
-          roadmaps = [], quizzes = [], topic_quizzes = [], interview } = data;
+          suggested_colleges = [], roadmaps = [], quizzes = [],
+          topic_quizzes = [], interview } = data;
+  const colleges = suggested_colleges.length ? suggested_colleges : (interview?.suggested_colleges || []);
 
   const initials = (name || email).slice(0, 2).toUpperCase();
 
@@ -99,6 +102,20 @@ export default function Profile() {
             </>
           )}
         </section>
+
+        {/* Recommended colleges */}
+        {colleges.length > 0 && (
+          <section className="pf-card">
+            <h3><FaGraduationCap /> Recommended Colleges</h3>
+            <div className="pf-list">
+              {colleges.map((c, i) => (
+                <div key={i} className="pf-row pf-row--static">
+                  <span className="pf-row-title">{c.name || c.department}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Roadmaps */}
         <section className="pf-card">
@@ -164,7 +181,7 @@ export default function Profile() {
                 ))}
               </div>
             )}
-            <pre className="pf-report">{interview.report}</pre>
+            <div className="pf-report"><ReportView report={interview.report} /></div>
           </section>
         )}
 

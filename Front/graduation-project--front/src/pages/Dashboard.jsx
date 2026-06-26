@@ -156,16 +156,18 @@ export default function Dashboard() {
 
       {/* ── Stat cards ── */}
       <section className="db-stats">
-        <div className="db-card db-card--blue">
+        <div className="db-card db-card--blue db-card--clickable"
+             onClick={() => navigate("/test/previous-results")} title="View quiz history">
           <div className="db-card-label">Quiz Attempts</div>
           <div className="db-card-value">{careerChoices}</div>
-          <div className="db-card-sub">quizzes taken</div>
+          <div className="db-card-sub">topic + roadmap quizzes →</div>
         </div>
 
-        <div className="db-card db-card--teal">
+        <div className="db-card db-card--teal db-card--clickable"
+             onClick={() => navigate("/test/previous-results")} title="View quiz history">
           <div className="db-card-label">Avg Quiz Score</div>
           <div className="db-card-value">{quizPerformance}%</div>
-          <div className="db-card-sub">career match</div>
+          <div className="db-card-sub">across all quizzes →</div>
         </div>
 
         <div className="db-card db-card--violet">
