@@ -29,3 +29,9 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+
+# ── Documentation drafts — NOT part of the deployed app ─────
+docs/
+deployment-guide.html
+*.docx
+back/Roadmap_Agents8_final_v.ipynb
