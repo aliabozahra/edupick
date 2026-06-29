@@ -18,7 +18,9 @@ from ai_core import AICore
 from interview_engine import InterviewEngine
 from roadmap_agent import generate_roadmap as _gen_roadmap, refresh_roadmap as _refresh_roadmap
 from quiz_agent import analyze_quiz as _analyze_quiz
+from cv_analyzer import analyze_cv as _analyze_cv
 from pymongo import MongoClient as _MC
+import tempfile
 
 load_dotenv()
 
@@ -50,6 +52,7 @@ topic_quiz_collection=db["topic_quiz_results"]
 interview_collection=db["interview_results"]
 chat_log_collection=db["chat_logs"]
 careers_collection=db["careers"]
+cv_collection=db["cv_analyses"]
 print(f"Connected to MongoDB ({DB_NAME})")
 
 # Home
@@ -654,6 +657,90 @@ def roadmap_refresh():
     except Exception as e:
         print("Refresh error:", e)
         return jsonify({"error": "Failed to refresh roadmap"}), 500
+
+# ══════════════════════════════════════════════════════════════
+# CV Analyzer
+# ══════════════════════════════════════════════════════════════
+
+@app.route("/cv/analyze", methods=["POST"])
+def cv_analyze():
+    """Analyze an uploaded CV (PDF) against a target job title.
+
+    Multipart form: cv (file, PDF), job_title (str), email (optional).
+    Returns the report at the top level.
+    """
+    job_title = (request.form.get("job_title") or "").strip()
+    email     = (request.form.get("email") or "").strip()
+    cv_file   = request.files.get("cv")
+
+    if not job_title:
+        return jsonify({"error": "job_title is required"}), 400
+    if cv_file is None or cv_file.filename == "":
+        return jsonify({"error": "A CV PDF file is required"}), 400
+
+    fname = (cv_file.filename or "").lower()
+    if not fname.endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+
+    tmp_path = None
+    try:
+        # Save to a temp file so pdfplumber can open it.
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            cv_file.save(tmp.name)
+            tmp_path = tmp.name
+
+        report = _analyze_cv(tmp_path, job_title)
+
+        # Persist per-user (best-effort).
+        if email:
+            try:
+                cv_collection.insert_one({
+                    "email":       email,
+                    "job_title":   job_title,
+                    "report":      report,
+                    "created_at":  datetime.utcnow(),
+                })
+            except Exception as exc:
+                print("CV save error:", exc)
+
+        return jsonify(report), 200
+    except Exception as e:
+        print("CV analyze error:", e)
+        return jsonify({"error": "Failed to analyze CV", "details": str(e)}), 500
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+@app.route("/cv/history", methods=["GET"])
+def cv_history():
+    """Return a user's previous CV analyses (newest first)."""
+    email = (request.args.get("email") or "").strip()
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+
+    docs = list(cv_collection.find(
+        {"email": email},
+        {"_id": 0, "job_title": 1, "created_at": 1, "report": 1}
+    ).sort("created_at", -1).limit(20))
+
+    items = []
+    for d in docs:
+        rep = d.get("report", {})
+        ts  = d.get("created_at")
+        items.append({
+            "job_title":     d.get("job_title", ""),
+            "created_at":    ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+            "match_score":   rep.get("match_score"),
+            "ats_score":     rep.get("ats_score"),
+            "content_score": rep.get("content_score"),
+            "verdict":       rep.get("verdict"),
+        })
+    return jsonify({"analyses": items}), 200
+
 
 # =====================
 # Track Discovery Interview  (Phase 2)

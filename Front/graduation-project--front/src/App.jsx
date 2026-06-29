@@ -19,6 +19,7 @@ import MainTest from './pages/MainTest';
 import TopicTest from './pages/TopicTest';
 import PerviousResults from './pages/PreivousResults';
 import TrackDiscovery from './pages/TrackDiscovery';
+import CVAnalyzer from './pages/CVAnalyzer';
 import './App.css';
 
 const NO_NAV = ["/", "/login", "/signup", "/forgetPassword", "/reset-password"];
@@ -49,6 +50,7 @@ function Layout() {
         <Route path="/test/topic-test" element={<TopicTest />} />
         <Route path="/test/previous-results" element={<PerviousResults />} />
         <Route path="/discover" element={<TrackDiscovery />} />
+        <Route path="/cv-analyzer" element={<CVAnalyzer />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
       {showWidget && <ChatWidget />}

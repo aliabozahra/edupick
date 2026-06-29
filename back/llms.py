@@ -74,6 +74,30 @@ def make_crew_groq(model: str = "llama-3.3-70b-versatile", temp: float = 0.3):
     )
 
 
+# ---------------------------------------------------------------------------
+# Central model registry — change a model name in ONE place.
+# The plain-Groq pipelines (roadmap_agent, cv_analyzer, comparison_tool) read
+# these. To switch a model later, just edit the string here (or set the env var).
+# ---------------------------------------------------------------------------
+GROQ_MODEL        = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+ROADMAP_MODEL     = os.environ.get("ROADMAP_MODEL",  GROQ_MODEL)
+CV_ANALYZER_MODEL = os.environ.get("CV_ANALYZER_MODEL", GROQ_MODEL)
+
+
+def groq_client():
+    """Return a raw `groq.Groq` client (or None if the key/SDK is missing).
+
+    Used by the plain-Groq pipelines that call the API directly with JSON mode,
+    instead of going through LangChain/CrewAI.
+    """
+    try:
+        from groq import Groq
+        key = os.environ.get("GROQ_API_KEY", "")
+        return Groq(api_key=key) if key else None
+    except Exception:
+        return None
+
+
 # Shorthand alias used in user's pattern
 _or = make_openrouter
 

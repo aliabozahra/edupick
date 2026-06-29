@@ -5,6 +5,7 @@ import {
   FaCheckCircle, FaCircle, FaTimes,
   FaChevronDown, FaChevronUp, FaBook, FaVideo,
   FaLink, FaPencilAlt, FaArrowLeft, FaShareAlt, FaQuestionCircle,
+  FaLaptopCode,
 } from "react-icons/fa";
 import "../styles/Roadmap.css";
 
@@ -34,6 +35,18 @@ function toggleTask(roadmap, pi, ti) {
         tasks: phase.tasks.map((task, tIdx) =>
           tIdx !== ti ? task : { ...task, completed: !task.completed }
         ),
+      }
+    ),
+  };
+}
+
+function toggleProject(roadmap, pi) {
+  return {
+    ...roadmap,
+    phases: roadmap.phases.map((phase, pIdx) =>
+      pIdx !== pi || !phase.project ? phase : {
+        ...phase,
+        project: { ...phase.project, completed: !phase.project.completed },
       }
     ),
   };
@@ -188,9 +201,14 @@ export default function Roadmap() {
   const email          = localStorage.getItem("userEmail") || "";
 
   const roadmapId      = location.state?.roadmapId || null;
+  const cvRoadmap      = location.state?.cvRoadmap || null;  // from CV Analyzer handoff
 
-  const [stage,  setStage]  = useState(roadmapId ? "loading" : "form");
-  const [form,   setForm]   = useState({ track: suggestedTrack, level: "beginner", goal: "" });
+  const [stage,  setStage]  = useState(cvRoadmap ? "roadmap" : roadmapId ? "loading" : "form");
+  const [form,   setForm]   = useState({
+    track: cvRoadmap?.track || suggestedTrack,
+    level: cvRoadmap?.level || "beginner",
+    goal:  cvRoadmap?.goal  || "",
+  });
   const [savedId, setSavedId] = useState(roadmapId);
   const [interviewTracks, setInterviewTracks] = useState(location.state?.suggestedTracks || []);
   const [hasInterview, setHasInterview] = useState(location.state?.fromInterview || false);
@@ -230,7 +248,7 @@ export default function Roadmap() {
       })
       .catch(() => {});
   }, [email, location.state]);
-  const [roadmap, setRoadmap]             = useState(null);
+  const [roadmap, setRoadmap]             = useState(cvRoadmap || null);
   const [loading, setLoading]             = useState(false);
   const [error,   setError]               = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -317,15 +335,27 @@ export default function Roadmap() {
     finally { setSaving(false); }
   };
 
-  // Toggle a task; if this is an already-saved roadmap, persist the change.
-  const handleToggleTask = (pi, ti) => setRoadmap(prev => {
-    const updated = toggleTask(prev, pi, ti);
+  // Persist progress to the saved roadmap (best-effort).
+  const persistProgress = (updated) => {
     if (savedId && email) {
       fetch(`${API_URL}/roadmap/progress`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, roadmap_id: savedId, roadmap: updated }),
       }).catch(() => {});
     }
+  };
+
+  // Toggle a topic; if this is an already-saved roadmap, persist the change.
+  const handleToggleTask = (pi, ti) => setRoadmap(prev => {
+    const updated = toggleTask(prev, pi, ti);
+    persistProgress(updated);
+    return updated;
+  });
+
+  // Toggle a phase's practical project.
+  const handleToggleProject = (pi) => setRoadmap(prev => {
+    const updated = toggleProject(prev, pi);
+    persistProgress(updated);
     return updated;
   });
 
@@ -350,6 +380,7 @@ export default function Roadmap() {
       actionLoading={actionLoading} saving={saving} saveMsg={saveMsg} error={error}
       showNoteModal={showNoteModal} noteText={noteText}
       onToggleTask={handleToggleTask}
+      onToggleProject={handleToggleProject}
       onRegenerate={handleRegenerate}
       onOpenNote={() => setShowNoteModal(true)}
       onCloseNote={() => setShowNoteModal(false)}
@@ -458,7 +489,7 @@ function LoadingScreen() {
       <div className="rm-loading-card">
         <FaSpinner className="rm-spin-large" />
         <h2>Building your personalized roadmap…</h2>
-        <p>Designing your path, finding real resources, and writing a quiz for each phase. This can take up to a minute.</p>
+        <p>Analyzing your profile, designing phases &amp; topics, curating real course links, and writing a 10-question quiz and a hands-on project for each phase. This can take up to a minute.</p>
         <div className="rm-dots"><span /><span /><span /></div>
       </div>
     </div>
@@ -469,7 +500,7 @@ function LoadingScreen() {
 function RoadmapScreen({
   roadmap, form, progress, actionLoading, saving, saveMsg, error,
   showNoteModal, noteText,
-  onToggleTask, onRegenerate, onOpenNote, onCloseNote,
+  onToggleTask, onToggleProject, onRegenerate, onOpenNote, onCloseNote,
   onNoteChange, onRegenerateWithNote, onSave, onPrint, onShare, onBack,
 }) {
   const hint = roadmap.display_hint || "timeline";
@@ -551,10 +582,10 @@ function RoadmapScreen({
         </div>
 
         {view === "checklist"
-          ? <ChecklistView phases={roadmap.phases} onToggleTask={onToggleTask} onTakeQuiz={setQuizPhase} />
+          ? <ChecklistView phases={roadmap.phases} onToggleTask={onToggleTask} onToggleProject={onToggleProject} onTakeQuiz={setQuizPhase} />
           : view === "kanban"
-          ? <KanbanView    phases={roadmap.phases} onToggleTask={onToggleTask} onTakeQuiz={setQuizPhase} />
-          : <TimelineView  phases={roadmap.phases} onToggleTask={onToggleTask} onTakeQuiz={setQuizPhase} />
+          ? <KanbanView    phases={roadmap.phases} onToggleTask={onToggleTask} onToggleProject={onToggleProject} onTakeQuiz={setQuizPhase} />
+          : <TimelineView  phases={roadmap.phases} onToggleTask={onToggleTask} onToggleProject={onToggleProject} onTakeQuiz={setQuizPhase} />
         }
       </div>
 
@@ -598,7 +629,7 @@ function RoadmapScreen({
 }
 
 // ── Timeline view ─────────────────────────────────────────────
-function TimelineView({ phases, onToggleTask, onTakeQuiz }) {
+function TimelineView({ phases, onToggleTask, onToggleProject, onTakeQuiz }) {
   return (
     <div className="rm-timeline">
       {phases.map((phase, pi) => (
@@ -613,11 +644,13 @@ function TimelineView({ phases, onToggleTask, onTakeQuiz }) {
               <span className="rm-phase-dur">{phase.duration}</span>
             </div>
             <p className="rm-phase-desc">{phase.description}</p>
+            <span className="rm-topics-label">Topics</span>
             <div className="rm-tasks">
               {phase.tasks.map((task, ti) => (
                 <TaskCard key={ti} task={task} onToggle={() => onToggleTask(pi, ti)} />
               ))}
             </div>
+            <PhaseProjectCard project={phase.project} onToggle={() => onToggleProject(pi)} />
             {phase.quiz?.length > 0 && (
               <button className="rm-phase-quiz-btn rm-no-print" onClick={() => onTakeQuiz(phase)}>
                 <FaQuestionCircle /> Take phase quiz ({phase.quiz.length} Qs)
@@ -631,7 +664,7 @@ function TimelineView({ phases, onToggleTask, onTakeQuiz }) {
 }
 
 // ── Kanban view ───────────────────────────────────────────────
-function KanbanView({ phases, onToggleTask, onTakeQuiz }) {
+function KanbanView({ phases, onToggleTask, onToggleProject, onTakeQuiz }) {
   return (
     <div className="rm-kanban">
       {phases.map((phase, pi) => {
@@ -672,6 +705,7 @@ function KanbanView({ phases, onToggleTask, onTakeQuiz }) {
                 </div>
               ))}
             </div>
+            <PhaseProjectCard project={phase.project} onToggle={() => onToggleProject(pi)} compact />
             {phase.quiz?.length > 0 && (
               <button className="rm-phase-quiz-btn rm-phase-quiz-btn--sm" onClick={() => onTakeQuiz(phase)}>
                 <FaQuestionCircle /> Quiz
@@ -685,7 +719,7 @@ function KanbanView({ phases, onToggleTask, onTakeQuiz }) {
 }
 
 // ── Checklist view ────────────────────────────────────────────
-function ChecklistView({ phases, onToggleTask, onTakeQuiz }) {
+function ChecklistView({ phases, onToggleTask, onToggleProject, onTakeQuiz }) {
   const [open, setOpen] = useState(() => phases.map(() => true));
   const toggle = idx => setOpen(prev => prev.map((v, i) => i === idx ? !v : v));
 
@@ -706,6 +740,7 @@ function ChecklistView({ phases, onToggleTask, onTakeQuiz }) {
               {phase.tasks.map((task, ti) => (
                 <TaskCard key={ti} task={task} onToggle={() => onToggleTask(pi, ti)} />
               ))}
+              <PhaseProjectCard project={phase.project} onToggle={() => onToggleProject(pi)} />
               {phase.quiz?.length > 0 && (
                 <button className="rm-phase-quiz-btn rm-no-print" onClick={() => onTakeQuiz(phase)}>
                   <FaQuestionCircle /> Take phase quiz ({phase.quiz.length} Qs)
@@ -808,6 +843,33 @@ function PhaseQuizModal({ phase, track, onClose }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Phase project card (the one practical task per phase) ─────
+function PhaseProjectCard({ project, onToggle, compact }) {
+  if (!project || !project.title) return null;
+  return (
+    <div className={`rm-project${project.completed ? " rm-project-done" : ""}${compact ? " rm-project-compact" : ""}`}>
+      <div className="rm-project-head">
+        <button className="rm-checkbox" onClick={onToggle} title="Mark project complete">
+          {project.completed
+            ? <FaCheckCircle className="rm-chk-on" />
+            : <FaCircle      className="rm-chk-off" />}
+        </button>
+        <span className="rm-project-badge"><FaLaptopCode /> Phase Project</span>
+        {project.estimated_hours > 0 && (
+          <span className="rm-project-hours">~{project.estimated_hours}h</span>
+        )}
+      </div>
+      <h4 className="rm-project-title">{project.title}</h4>
+      {!compact && <p className="rm-project-desc">{project.description}</p>}
+      {!compact && project.deliverable && (
+        <p className="rm-project-deliverable">
+          <strong>Deliverable:</strong> {project.deliverable}
+        </p>
+      )}
     </div>
   );
 }

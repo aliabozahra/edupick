@@ -496,3 +496,45 @@
   .rm-action-bar { justify-content: flex-start; }
   .rm-form-card { padding: 28px 22px; }
 }
+
+/* ── Topics label + phase project card (v2 roadmap) ───────────── */
+.rm-topics-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ep-text-dim);
+  margin: 2px 0 8px;
+}
+
+.rm-project {
+  margin-top: 12px;
+  background: linear-gradient(135deg, rgba(47,111,237,0.12), rgba(93,168,245,0.06));
+  border: 1px solid var(--ep-border-2);
+  border-radius: var(--ep-radius);
+  padding: 14px 16px;
+}
+.rm-project-done { background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.4); }
+.rm-project-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.rm-project-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ep-sky);
+  background: rgba(47,111,237,0.14);
+  border: 1px solid var(--ep-border-2);
+  border-radius: 999px; padding: 3px 10px;
+}
+.rm-project-hours {
+  margin-left: auto;
+  font-size: 0.72rem; font-weight: 600; color: var(--ep-text-dim);
+  background: var(--ep-glass-2); border: 1px solid var(--ep-border);
+  border-radius: 999px; padding: 3px 9px;
+}
+.rm-project-title { font-size: 0.98rem; font-weight: 700; color: var(--ep-text); margin: 0 0 6px; }
+.rm-project-done .rm-project-title { text-decoration: line-through; color: var(--ep-text-dim); }
+.rm-project-desc { font-size: 0.86rem; color: var(--ep-text-mid); line-height: 1.6; margin: 0 0 6px; }
+.rm-project-deliverable { font-size: 0.82rem; color: var(--ep-text-mid); margin: 0; }
+.rm-project-deliverable strong { color: var(--ep-sky); }
+.rm-project-compact { padding: 10px 12px; margin-top: 10px; }
+.rm-project-compact .rm-project-title { font-size: 0.85rem; margin: 0; }
